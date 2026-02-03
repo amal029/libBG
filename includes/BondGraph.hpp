@@ -123,6 +123,34 @@ struct BondGraph {
     }
   }
 
+  // Simplify the graph
+  void simplify() {
+    std::vector<size_t> done;
+    done.reserve(components.size()); // Just to make it faster
+    bool madeChange;
+    while (true) {
+      madeChange = false;
+      for (size_t i = 0; i < components.size(); ++i) {
+        size_t id =
+            std::visit([](const auto &x) { return x.getID(); }, components[i]);
+	bool res = std::find(done.begin(), done.end(), id) != done.end();
+        if (canElimJunction(id) && res) {
+          elimJunction(id);
+          madeChange = true;
+        }
+        if (canContractJunction(id) && res) {
+          contractJunction(id);
+          madeChange = true;
+        }
+        // Add id to done
+        done.push_back(id);
+      }
+      // If no change was made in the graph then just break out.
+      if (!madeChange)
+        break;
+    }
+  }
+
 private:
   // XXX: Find the matching junction for simplification
   bool canElimJunction(size_t id) {
