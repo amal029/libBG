@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Component.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstring>
@@ -35,6 +36,7 @@ struct BondGraph {
       components.resize(els + 1);
       // Reserve space for the edges too
       edges.resize(els + 1, {});
+      redges.resize(els + 1, {});
       // Reserve space in visited vector too
       visited.resize(els + 1, false);
     }
@@ -69,12 +71,17 @@ struct BondGraph {
     out.addPort(Port());
     // Then update the adjacency list
     edges[in.getID()].push_back(out.getID());
+    redges[out.getID()].push_back(in.getID()); // The reverse edge.
   }
 
+  [[nodiscard]]
   // Get the component from the vector
   const componentVariant &getComponentAt(size_t i) const {
     return components[i];
   }
+
+  [[nodiscard]]
+  componentVariant &getComponentAt(size_t i) { return components[i]; }
 
   // Get the size of the component vector
   size_t getNumComponents() const { return components.size(); }
@@ -96,23 +103,151 @@ struct BondGraph {
 
   // DFS traverse the graph from the sources and apply a function to each of the
   // node
-  template <typename Callable>
-  void dfs(const std::vector<size_t> &sources, Callable &&f) const {
+  template <typename Callable, bool PRE = true>
+  void dfs(const std::vector<size_t> &sources, Callable &f) {
     for (size_t i : sources) {
-      DFS(i, f);
+      DFS<Callable, PRE>(i, f);
+    }
+    // Then go through all the nodes that have not been visited yet --
+    // possible.
+    bool res =
+        std::all_of(visited.begin(), visited.end(), [](bool x) { return x; });
+    if (!res) {
+      size_t i = 0;
+      for (bool x : visited) {
+        if (!x) {
+          DFS<Callable, PRE>(i, f); // Visit if not visited
+        }
+        ++i;
+      }
     }
   }
 
 private:
-  template <typename Callable> void DFS(size_t i, Callable &&f) {
+  // XXX: Find the matching junction for simplification
+  bool canElimJunction(size_t id) {
+    bool toret = false;
+    // Check if this component is a junction
+    auto &component = getComponentAt(id);
+    if (std::holds_alternative<Component<ComponentType::J0>>(component) ||
+        std::holds_alternative<Component<ComponentType::J1>>(component)) {
+      // Check the port size
+      size_t numPorts = std::visit(
+          [](const auto &x) -> size_t { return x.portSize(); }, component);
+      if (numPorts == 2) {
+        // Now check that one is an input and one is an output
+        toret = (edges[id].size() == 1) && (redges[id].size() == 1);
+      }
+    }
+    return toret;
+  }
+  // Eliminate the junction
+  void elimJunction(size_t id) {
+    size_t prevId = redges[id][0];
+    size_t nextId = edges[id][0];
+
+    // Get the index of the id in edges of previd
+    auto index = std::find(edges[prevId].begin(), edges[prevId].end(), id);
+    assert(index != edges[prevId].end());
+    // Now replace the index value with nextid
+    *index = nextId;
+
+    // Replace nextid' reverse edges id --> previd
+    auto index1 = std::find(redges[nextId].begin(), redges[nextId].end(), id);
+    assert(index1 != redges[nextId].end());
+    *index1 = prevId;
+  }
+
+  // Contracting junctions
+  bool canContractJunction(size_t id) {
+    bool toret = false;
+    // XXX: A junction with same type connected to another junction of
+    // the same type.
+
+    auto &component = getComponentAt(id);
+    if (std::holds_alternative<Component<ComponentType::J0>>(component) ||
+        std::holds_alternative<Component<ComponentType::J1>>(component)) {
+      // Is this junction connected to another junction of the same type
+      ComponentType idType =
+          std::visit([](const auto &x) -> ComponentType { return x.getType(); },
+                     component);
+      size_t counter = 0;
+      for (size_t nid : edges[id]) {
+        ComponentType nType = std::visit(
+            [&](const auto &y) -> ComponentType { return y.getType(); },
+            getComponentAt(nid));
+        counter += (nType == idType) ? 1 : 0;
+      }
+      toret = counter == 1;
+    }
+    return toret;
+  }
+
+  void contractJunction(size_t id) {
+    // Get my type
+    ComponentType mType =
+        std::visit([](const auto &x) -> ComponentType { return x.getType(); },
+                   getComponentAt(id));
+    assert(mType == ComponentType::J0 || mType == ComponentType::J1);
+    size_t nid = 0;
+    // First get the nid with the same type
+    for (auto x = edges[id].begin(); x != edges[id].end(); ++x) {
+      const componentVariant &comp = getComponentAt(*x);
+      bool res = std::visit(
+          [&mType](const auto &y) { return y.getType() == mType; }, comp);
+      if (res) {
+        nid = *x;
+        break;
+      }
+    }
+    // Now connect all the inputs from id to nid' input
+    for (size_t x : redges[id]) {
+      auto rindex = std::find(edges[x].begin(), edges[x].end(), id);
+      assert(rindex != edges[x].end());
+      *rindex = nid; // reset it to the next same Junction node.
+      // Now add 'x' to nid's redges if it is already not there
+      auto niter = std::find(redges[nid].begin(), redges[nid].end(), x);
+      if (niter == redges[nid].end()) {
+        redges[nid].push_back(x);
+        // Add port to nid component
+        componentVariant &nComponent = getComponentAt(nid);
+        std::visit([](auto &c) { c.addPort(Port()); }, nComponent);
+      }
+    }
+
+    // Now re-attach all the outputs from id to nid
+    for (size_t x : edges[id]) {
+      if (x == nid)
+        continue;
+      auto findex = std::find(redges[x].begin(), redges[x].end(), id);
+      assert(findex != redges[x].end());
+      *findex = nid;
+      // Now add a forward edge from nid to x if it is not already there
+      auto niter = std::find(edges[nid].begin(), edges[nid].end(), x);
+      if (niter == edges[nid].end()) {
+        edges[nid].push_back(x);
+        // Add port to nid component
+        componentVariant &nComponent = getComponentAt(nid);
+        std::visit([](auto &c) { c.addPort(Port()); }, nComponent);
+      }
+    }
+  }
+
+  // XXX: Depth first traversal with default pre-order traversal
+  template <typename Callable, bool PRE = true>
+  void DFS(size_t i, Callable &f) {
+    if (visited[i])
+      return;
     visited[i] = true;
     // Pre-order traversal
-    f(components[i]);
+    if (PRE)
+      std::visit([&f](auto &x) { f(x); }, components[i]);
     // Go through all the children of these nodes
     for (size_t j : edges[i]) {
-      if (!visited[j])
-        DFS(j, f);
+      DFS<Callable, PRE>(j, f);
     }
+    if (!PRE)
+      std::visit([&f](auto &x) { f(x); }, components[i]);
   }
 
   // The vector of all the components in the graph -- it is closed not an open
@@ -120,17 +255,17 @@ private:
   std::vector<componentVariant> components;
   // Adjacency list of the graph
   std::vector<std::vector<size_t>> edges;
+  std::vector<std::vector<size_t>> redges; // reverse edges
   // The visited node vector
   std::vector<bool> visited;
 };
 
-static std::ostream &operator<<(std::ostream &os, const BondGraph &g) {
-  for (size_t i = 0; i < g.getNumComponents(); ++i) {
-    std::visit([&os](const auto &x) -> void { os << x; }, g.getComponentAt(i));
-    if (i < g.getNumComponents() - 1) {
-      os << ", ";
-    }
-    os << "\n";
-  }
+static std::ostream &operator<<(std::ostream &os, BondGraph &g) {
+  // First get all the sources
+  std::vector<size_t> sources;
+  g.getSources(sources);
+  // Then visit the graph and apply the print function to everything
+  auto visitor = [&os](auto &x) { os << x << "\n"; };
+  g.dfs<decltype(visitor), true>(sources, visitor);
   return os;
 }

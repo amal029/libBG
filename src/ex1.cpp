@@ -27,7 +27,7 @@ int main() {
   bg.connect(j1, bg.getComponent<ComponentType::C>("c"));
 
   // Print the bond graph
-  std::cout << bg;
+  std::cout << bg; // This is done by traversing the graph
 
   return 0;
 }

@@ -125,7 +125,6 @@ static std::ostream &operator<<(std::ostream &os, const Component<T> &c) {
   os << "Type:" << c.getType() << ", ";
   os << "ID:" << c.getID() << ", ";
   os << "Ports:{";
-  size_t i = 0;
   for (size_t i = 0; i < c.portSize(); ++i) {
     os << c.getPort(i);
     if (i < c.portSize() - 1) {
