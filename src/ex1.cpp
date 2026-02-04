@@ -1,11 +1,11 @@
-#include "../includes/BondGraph.hpp"
-#include "../includes/Component.hpp"
+#include "BondGraph.hpp"
+#include "Component.hpp"
 
 #include <iostream>
 
 int main() {
   // Declare a Capacitor
-  Component<ComponentType::C> c{"c"};    // capacitor
+  Component<ComponentType::C> c{"c", PrefCausality::I};    // capacitor
   Component<ComponentType::SE> se{"se"}; // voltage (effort) source
   Component<ComponentType::R> r{"r"};    // resistor
   Component<ComponentType::J1> j{"1"};   // 1 Junction (in series)
@@ -21,7 +21,9 @@ int main() {
 
   auto &j1 = bg.getComponent<ComponentType::J1>("1");
 
-  // Make the connections
+  // Make the connections -- we don't have to do it this way. We can use
+  // the moved object, but be careful in that case -- it is
+  // implementation defined then.
   bg.connect(bg.getComponent<ComponentType::SE>("se"), j1);
   bg.connect(j1, bg.getComponent<ComponentType::R>("r"));
   bg.connect(j1, bg.getComponent<ComponentType::C>("c"));

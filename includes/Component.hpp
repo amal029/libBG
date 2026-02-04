@@ -1,10 +1,16 @@
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <ostream>
+#include <string>
 #include <vector>
+#include "exception.hpp"
+#include "ginac/symbol.h"
+#include <ginac/ginac.h>
 
 struct Util {
   static size_t getID() {
@@ -14,55 +20,137 @@ struct Util {
 };
 
 // The type of components that are allowed in the Bond Graph
-enum class ComponentType : std::uint8_t { C = 0, L, R, SE, SF, J0, J1 };
+enum class ComponentType : std::uint8_t { C = 0, L, R, SE, SF, GY, TF, J0, J1 };
+
+// The preferred causality
+enum class PrefCausality : std::uint8_t { I = 0, D, N };
 
 // The different types of causality
 enum class Causality : std::uint8_t { Flow = 0, Effort, ACausal };
 
 // The port structure of the component
 struct Port {
-  Port() : in(Causality::ACausal), out(Causality::ACausal) {}
+  Port() : in(Causality::ACausal), out(Causality::ACausal) {
+    size_t ID = Util::getID();
+    inx = GiNaC::symbol{"in" + std::to_string(ID)};
+    outx = GiNaC::symbol{"out" + std::to_string(ID)};
+  }
+  bool getAssigned() const { return assigned; }
+  void setAssigned() { assigned = true; }  
   Port(const Port &) = delete;
   Port(Port &&) = default;
   Port &operator=(const Port &) = delete;
   Port &operator=(Port &&) = default;
-  virtual ~Port() {}
+  ~Port() {}
 
   // The public functions
   void setInCausality(Causality c) { in = c; }
   void setOutCausality(Causality c) { out = c; }
   Causality getInCausality() const { return in; }
   Causality getOutCausality() const { return out; }
+  const GiNaC::symbol &getInName() const { return inx; }
+  const GiNaC::symbol &getOutName() const { return outx; }
 
 private:
   Causality in;  // The in causality
   Causality out; // The out causality for this port.
+  bool assigned = false;
+  // The symbolic values each of these ports hold
+  GiNaC::symbol inx;
+  GiNaC::symbol outx;
 };
 
 // The common Component class
 template <ComponentType T> struct Component {
-  Component() {} // This is for Bond Graph insertion
-  Component(const char *n) : myT(T), name(n), ID(Util::getID()) {}
-  Component(const Component &) = delete;   // Copy constructor is deleted
-  Component(Component &&) = default; // Use the default move constructor
-  Component &operator=(const Component &) = delete; // Copy assignment is deleted
-  Component &
+  constexpr Component() {} // This is for Bond Graph insertion
+  constexpr Component(const char *n, PrefCausality Pref = PrefCausality::N)
+      : myT(T), name(n), ID(Util::getID()), mPref(Pref) {
+    // Static assert that Pref causality can only be given for components that
+    // are not junctions
+    assert((T != ComponentType::J0 || Pref == PrefCausality::N) &&
+           (T != ComponentType::J1 || Pref == PrefCausality::N));
+    value = GiNaC::symbol{name + std::to_string(ID)};
+  }
+  constexpr Component(const Component &) = delete; // Copy constructor is
+                                                   // deleted
+  constexpr Component(Component &&) =
+      default; // Use the default move constructor
+  constexpr Component &
+  operator=(const Component &) = delete; // Copy assignment is deleted
+  constexpr Component &
   operator=(Component &&) = default; // Use default move assignment operator
-  virtual ~Component() {}            // Virtual destructor
+  ~Component() {}                    // Destructor
 
   // The public methods
-  const char *getName() const { return name; }
-  size_t getID() const { return ID; }
-  ComponentType getType() const { return myT; }
-  size_t portSize() const { return ports.size(); }
-  const Port &getPort(size_t i) const { return ports[i]; }
-  void addPort(Port &&p) { ports.push_back(std::move(p)); }
+  constexpr const char *getName() const { return name; }
+  constexpr size_t getID() const { return ID; }
+  constexpr ComponentType getType() const { return myT; }
+  constexpr size_t portSize() const { return ports.size(); }
+  constexpr const Port *getPort(size_t i) const {
+    if (i > ports.size()) {
+      throw PortIndexOutofBounds("");
+    }
+    return &ports[i];
+  }
+  constexpr Port *getPort(size_t i) {
+    if (i > ports.size()) {
+      throw PortIndexOutofBounds("");
+    }
+    return &ports[i];
+  }
+  constexpr void setPort(size_t i, Port &&p) { ports[i] = std::move(p); }
+  constexpr void addPort(Port &&p) { ports.push_back(std::move(p)); }
+  // Deleted means deleted from the bond graph
+  constexpr void setDeleted() { deleted = true; }
+  constexpr bool getDeleted() const { return deleted; }
+  constexpr const GiNaC::symbol &getValue() const { return value; }
+
+  constexpr void assignSourceCausality() {
+    if (ports.size() != 1) {
+      std::cerr << *this << "\n";
+      throw NumPorts("Number of ports incorrect\n");
+    }
+    if (myT == ComponentType::SE) {
+      ports[0].setOutCausality(Causality::Effort);
+      ports[0].setInCausality(Causality::Flow);
+    } else if (myT == ComponentType::SF) {
+      ports[0].setOutCausality(Causality::Flow);
+      ports[0].setInCausality(Causality::Effort);
+    }
+    ports[0].setAssigned();
+  }
+
+  void satisfyConstraints() const {
+    if (T == ComponentType::J0 || T == ComponentType::J1) {
+      satisfyJunctionConstraints();
+    }
+  }
 
 private:
+  void satisfyJunctionConstraints() const {
+    // Only 1 flow in for junction J1 and only 1 effort in for J0
+    uint8_t counter = 0;
+    for (const Port &x : ports) {
+      if (T == ComponentType::J0)
+        counter += x.getInCausality() == Causality::Effort ? 0 : 1;
+      else
+        counter += x.getInCausality() == Causality::Effort ? 0 : 1;
+    }
+    if (counter > 1) {
+      throw JunctionContraintViolated(
+          std::format("Junction {} cannot satisfy constraints\n", ID));
+    }
+  }
+
   ComponentType myT;
   const char *name; // The user name of the component
   size_t ID;        // The unique ID generated internally for each component
+  PrefCausality mPref;
   std::vector<Port> ports; // The number of ports of this component
+  bool deleted = false;    // Has this been deleted from the graph
+                           // during simplification.
+  // The symbolic value of this component
+  GiNaC::symbol value;
 };
 
 // Printing the enum
@@ -88,6 +176,12 @@ static std::ostream &operator<<(std::ostream &os, const ComponentType &c) {
     break;
   case ComponentType::J1:
     os << "1 Junction";
+    break;
+  case ComponentType::GY:
+    os << "Gyrator";
+    break;
+  case ComponentType::TF:
+    os << "Transformer";
     break;
   }
   return os;
@@ -120,6 +214,8 @@ static std::ostream &operator<<(std::ostream &os, const Port &p) {
 // Operators for printing things
 template <ComponentType T>
 static std::ostream &operator<<(std::ostream &os, const Component<T> &c) {
+  if (c.getDeleted())
+    throw DeletedException("Accessed a deleted node!");
   os << "{";
   os << "Name:" << c.getName() << ", ";
   os << "Type:" << c.getType() << ", ";

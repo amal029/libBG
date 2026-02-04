@@ -5,8 +5,10 @@
 #include <cassert>
 #include <cstddef>
 #include <cstring>
+#include <format>
 #include <iostream>
 #include <ostream>
+#include <sstream>
 #include <variant>
 #include <vector>
 
@@ -15,7 +17,8 @@ using componentVariant =
     std::variant<Component<ComponentType::C>, Component<ComponentType::L>,
                  Component<ComponentType::J0>, Component<ComponentType::J1>,
                  Component<ComponentType::R>, Component<ComponentType::SE>,
-                 Component<ComponentType::SF>>;
+                 Component<ComponentType::SF>, Component<ComponentType::GY>,
+                 Component<ComponentType::TF>>;
 
 struct BondGraph {
   // Public methods
@@ -81,7 +84,9 @@ struct BondGraph {
   }
 
   [[nodiscard]]
-  componentVariant &getComponentAt(size_t i) { return components[i]; }
+  componentVariant &getComponentAt(size_t i) {
+    return components[i];
+  }
 
   // Get the size of the component vector
   size_t getNumComponents() const { return components.size(); }
@@ -133,7 +138,7 @@ struct BondGraph {
       for (size_t i = 0; i < components.size(); ++i) {
         size_t id =
             std::visit([](const auto &x) { return x.getID(); }, components[i]);
-	bool res = std::find(done.begin(), done.end(), id) != done.end();
+        bool res = std::find(done.begin(), done.end(), id) != done.end();
         if (canElimJunction(id) && res) {
           elimJunction(id);
           madeChange = true;
@@ -151,7 +156,125 @@ struct BondGraph {
     }
   }
 
+  void assignCausality() {
+    // First get all the sources
+    std::vector<size_t> sources;
+    getSources(sources); // These are all the sources
+    // Now assign the ports for all the sources and their neighbor
+    // junctions for all of these fixed causality sources.
+
+    // There can be only a single output for a given source
+    for (const auto &s : sources) {
+      if (edges[s].size() != 1) {
+        throw NumEdges("Source has incorrect number of ports\n");
+      }
+      // Now assign the effort and flow causality for this source (also sets
+      // assigned for the port)
+      std::visit([](auto &x) { x.assignSourceCausality(); }, getComponentAt(s));
+      // Now assign the ports for the neighbouring junction
+      componentVariant &neighbour = getComponentAt(edges[s][0]);
+      ComponentType neighbourType =
+          std::visit([](const auto &x) -> ComponentType { return x.getType(); },
+                     neighbour);
+      if (neighbourType != ComponentType::J0 &&
+          neighbourType != ComponentType::J1) {
+        std::string message =
+            std::format("Source {} not conneted to a Junction\n", s);
+        throw InCorrectComponentConnection(message);
+      }
+      // Now assign causality of the incoming port to the neighbours
+      const Port *myPort =
+          std::visit([](const auto &x) -> const Port * { return x.getPort(0); },
+                     getComponentAt(s));
+      assignJunctionCausality(s, edges[s][0], myPort, false);
+    }
+    // FIXME: Here call Junction causality from every random source for
+    // propagation across the graph with propagate = true.
+  }
+
 private:
+  // This will assign causality for the given port myPort looking at the
+  // parent' port assignment.
+  void componentAssignAndPropagate(size_t myId, Port *myPort, size_t pid,
+                                   std::vector<const Port *> &parentPorts) {
+    // The parent should always be a junction This should go back to the
+    // junction for assignment as soon as the assignment for this port
+    // is over -- call assignJunctioncausality
+  }
+
+  void junctionPropagate(size_t id) {
+    // Go through all the neighbours and get neighbours that have not
+    // yet have a causality assigned
+
+    // The vector of ports that have been assigned already for Junction id
+    std::vector<const Port *> assignedPorts;
+    for (size_t i = 0; i < edges.size(); ++i) {
+      const Port *p = std::visit([&i](const auto &x) { return x.getPort(i); },
+                                 getComponentAt(id));
+      if (p->getAssigned())
+        assignedPorts.push_back(p);
+    }
+
+    std::vector<size_t> rs;
+    std::vector<Port *> rports;
+    // Preferred causality neighbours first then indifferent causality
+    for (size_t x : edges[id]) {
+      Port *nport = getCausalPort(x, id);
+      // If port not yet assigned then
+      if (!nport->getAssigned()) {
+        // Is the component at x a preferred causality component?
+        if (std::visit([](const auto &x)
+                           -> bool { return x.getType() != ComponentType::R; },
+                       getComponentAt(x))) {
+          // Then we want to assign causality to this port of the neighbouring
+          // component
+          componentAssignAndPropagate(x, nport, id, assignedPorts);
+        } else {
+          rs.push_back(x); // pushed to Resistor vector
+          rports.push_back(nport);
+        }
+      }
+    }
+    // Now we assign causality to rs.
+    for (size_t i = 0; i < rs.size(); ++i) {
+      componentAssignAndPropagate(rs[i], rports[i], id, assignedPorts);
+    }
+  }
+
+  // This function gives the port of the id connected to parent ID (pid)
+  // component
+  Port *getCausalPort(size_t id, size_t pid) {
+    // Here pid is the id of the parent I should be connected to.
+    // Get the index of the pid from redges
+    auto res = std::find(redges[id].begin(), redges[id].end(), pid);
+    if (res == redges[id].end()) {
+      throw InCorrectComponentConnection(
+          std::format("Junction {} not connected to {}", id, pid));
+    }
+    size_t index = res - redges[id].begin();
+    // Now index will be the port that will be used to assign causality
+    Port *myPort =
+        std::visit([&index](auto &x) -> Port * { return x.getPort(index); },
+                   getComponentAt(id));
+    return myPort;
+  }
+
+  // Junction causality assignment
+  void assignJunctionCausality(size_t pid, size_t id, const Port *pport,
+                               bool propagate = true) {
+    Port *myPort = getCausalPort(id, pid);
+    // Set the causality of this junction
+    myPort->setInCausality(pport->getOutCausality());
+    myPort->setOutCausality(pport->getInCausality());
+    myPort->setAssigned();
+    // Now check that the causality constraints of this junction are
+    // satisfied.
+    std::visit([](const auto &x) { x.satisfyConstraints(); },
+               getComponentAt(id));
+    if (propagate) {
+      junctionPropagate(id);
+    }
+  }
   // XXX: Find the matching junction for simplification
   bool canElimJunction(size_t id) {
     bool toret = false;
@@ -184,6 +307,9 @@ private:
     auto index1 = std::find(redges[nextId].begin(), redges[nextId].end(), id);
     assert(index1 != redges[nextId].end());
     *index1 = prevId;
+
+    // Here we set the deleted to true for this component
+    std::visit([](auto &x) { x.setDeleted(); }, getComponentAt(id));
   }
 
   // Contracting junctions
@@ -259,6 +385,8 @@ private:
         std::visit([](auto &c) { c.addPort(Port()); }, nComponent);
       }
     }
+    // Set this node to deleted
+    std::visit([](auto &x) { x.setDeleted(); }, getComponentAt(id));
   }
 
   // XXX: Depth first traversal with default pre-order traversal
