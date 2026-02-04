@@ -8,6 +8,7 @@
 #include <ostream>
 #include <string>
 #include <vector>
+#include <format>
 #include "exception.hpp"
 #include "ginac/symbol.h"
 #include <ginac/ginac.h>
@@ -35,7 +36,7 @@ struct Port {
     inx = GiNaC::symbol{"in" + std::to_string(ID)};
     outx = GiNaC::symbol{"out" + std::to_string(ID)};
   }
-  bool getAssigned() const { return assigned; }
+  constexpr bool getAssigned() const { return assigned; }
   void setAssigned() { assigned = true; }  
   Port(const Port &) = delete;
   Port(Port &&) = default;
@@ -222,7 +223,7 @@ static std::ostream &operator<<(std::ostream &os, const Component<T> &c) {
   os << "ID:" << c.getID() << ", ";
   os << "Ports:{";
   for (size_t i = 0; i < c.portSize(); ++i) {
-    os << c.getPort(i);
+    os << *c.getPort(i);
     if (i < c.portSize() - 1) {
       os << ", ";
     }
