@@ -57,9 +57,9 @@ public:
 
 class JunctionAssignment : public std::exception {
 private:
-  const char* message;
+  std::string message;
 
 public:
-  explicit JunctionAssignment(const char *msg) : message(msg) {}
-  const char *what() const noexcept override { return message; }
+  explicit JunctionAssignment(const std::string &msg) : message(msg) {}
+  const char *what() const noexcept override { return message.c_str(); }
 };
