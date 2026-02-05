@@ -189,14 +189,23 @@ struct BondGraph {
 
     // Now do junction propagation for each source
     for (const auto &s : sources) {
-      const Port *myPort =
-          std::visit([](const auto &x) -> const Port * { return x.getPort(0); },
-                     getComponentAt(s));
-      assignJunctionCausality(s, edges[s][0], myPort);
+      junctionPropagate(edges[s][0]);
     }
   }
 
 private:
+  bool
+  isAssignedCausality(Causality x,
+                      const std::vector<const Port *> &parentPortsAssigned) {
+    bool toret = false;
+    for (const Port *pp : parentPortsAssigned) {
+      if (pp->getInCausality() == x) {
+        toret = true;
+        break;
+      }
+    }
+    return toret;
+  }
   // This will assign causality for the given port myPort looking at the
   // parent' port assignment.
   void componentAssignAndPropagateC(
@@ -209,6 +218,8 @@ private:
       myPort->setInCausality(Causality::Flow);
       pPort->setOutCausality(Causality::Flow);
       pPort->setInCausality(Causality::Effort);
+      myPort->setAssigned();
+      pPort->setAssigned();
     };
 
     auto diffCausality = [&myPort, &pPort]() {
@@ -216,12 +227,13 @@ private:
       pPort->setInCausality(Causality::Flow);
       myPort->setOutCausality(Causality::Flow);
       myPort->setInCausality(Causality::Effort);
+      myPort->setAssigned();
+      pPort->setAssigned();
     };
 
     // You need to assign both myPort and pPort' causality. Then you
     // call junctionPropagate(id) Then you call assignJunctioncausality
     // with your id for each of your outgoing edge.
-
     // 1. Assign causality for myPort making sure that parent' type is
     // satisfied.
     if (pType == ComponentType::J1) {
@@ -231,14 +243,7 @@ private:
     } else {
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
-      bool inEffort = false;
-      for (const Port *pp : parentPortsAssigned) {
-        if (pp->getInCausality() == Causality::Effort) {
-          inEffort = true;
-          break;
-        }
-      }
-      if (inEffort) {
+      if (isAssignedCausality(Causality::Effort, parentPortsAssigned)) {
         std::cerr << std::format("Assigning differential causality to {}",
                                  myId);
         diffCausality();
@@ -257,12 +262,43 @@ private:
       const std::vector<const Port *> &parentPortsAssigned,
       ComponentType pType) {
 
-    // You need to assign both myPort and pPort' causality. Then you
-    // call junctionPropagate(id) Then you call assignJunctioncausality
-    // with your id for each of your outgoing edge.
+    auto integralCausality = [&myPort, &pPort]() {
+      myPort->setOutCausality(Causality::Flow);
+      myPort->setInCausality(Causality::Effort);
+      pPort->setOutCausality(Causality::Effort);
+      pPort->setInCausality(Causality::Flow);
+      myPort->setAssigned();
+      pPort->setAssigned();
+    };
 
-    // 1. Assign causality for myPort making sure that parent' type is
-    // satisfied.
+    auto diffCausality = [&myPort, &pPort]() {
+      pPort->setOutCausality(Causality::Flow);
+      pPort->setInCausality(Causality::Effort);
+      myPort->setOutCausality(Causality::Effort);
+      myPort->setInCausality(Causality::Flow);
+      myPort->setAssigned();
+      pPort->setAssigned();
+    };
+
+    if (pType == ComponentType::J0) {
+      // Here I don't care about the type just assign preferred
+      // causality -- effort out and flow in
+      integralCausality();
+    } else {
+      // Now we need to make sure that the assigned causalities do not
+      // already have an in Causality of Effort.
+      if (isAssignedCausality(Causality::Flow, parentPortsAssigned)) {
+        std::cerr << std::format("Assigning differential causality to {}",
+                                 myId);
+        diffCausality();
+      } else {
+        integralCausality();
+      }
+    }
+    if (edges[myId].size() > 0) {
+      throw NumEdges(
+          std::format("Component {} cannot have an outgoing edge\n", myId));
+    }
   }
 
   void componentAssignAndPropagateGY(
@@ -270,12 +306,15 @@ private:
       const std::vector<const Port *> &parentPortsAssigned,
       ComponentType pType) {
 
-    // You need to assign both myPort and pPort' causality. Then you
-    // call junctionPropagate(id) Then you call assignJunctioncausality
-    // with your id for each of your outgoing edge.
+    
 
-    // 1. Assign causality for myPort making sure that parent' type is
-    // satisfied.
+  }
+  
+  void componentAssignAndPropagateJ(
+      size_t myId, Port *myPort, Port *pPort, size_t pid,
+      const std::vector<const Port *> &parentPortsAssigned,
+      ComponentType pType) {
+
   }
 
   void componentAssignAndPropagateTF(
@@ -283,12 +322,6 @@ private:
       const std::vector<const Port *> &parentPortsAssigned,
       ComponentType pType) {
 
-    // You need to assign both myPort and pPort' causality. Then you
-    // call junctionPropagate(id) Then you call assignJunctioncausality
-    // with your id for each of your outgoing edge.
-
-    // 1. Assign causality for myPort making sure that parent' type is
-    // satisfied.
   }
 
   void componentAssignAndPropagateR(
@@ -327,6 +360,22 @@ private:
     std::vector<size_t> rs;
     std::vector<Port *> rports;
     std::vector<Port *> myRports;
+
+    // GY ports and GYs
+    std::vector<size_t> gys;
+    std::vector<Port *> gyports;
+    std::vector<Port *> mygyports;
+
+    // TFports and TFs
+    std::vector<size_t> tfs;
+    std::vector<Port *> tfports;
+    std::vector<Port *> mytfports;
+
+    // Junction ports
+    std::vector<size_t> js;
+    std::vector<Port *> jports;
+    std::vector<Port *> myjports;
+
     ComponentType myType = std::visit([](const auto &x) { return x.getType(); },
                                       getComponentAt(id));
     const size_t numRedges = redges[id].size();
@@ -347,39 +396,103 @@ private:
         ComponentType nType = std::visit(
             [](const auto &x) -> ComponentType { return x.getType(); },
             getComponentAt(x));
-        if (nType == ComponentType::C) {
-          // Then we want to assign causality to this port of the neighbouring
-          // component
+        switch (nType) {
+        case ComponentType::C: {
           componentAssignAndPropagateC(x, nport, myPort, id, assignedPorts,
                                        myType);
-        } else if (nType == ComponentType::L) {
+          break;
+        }
+        case ComponentType::L: {
           componentAssignAndPropagateL(x, nport, myPort, id, assignedPorts,
                                        myType);
-        } else if (nType == ComponentType::GY) {
-          componentAssignAndPropagateGY(x, nport, myPort, id, assignedPorts,
-                                        myType);
-        } else if (nType == ComponentType::TF) {
-          componentAssignAndPropagateTF(x, nport, myPort, id, assignedPorts,
-                                        myType);
-        } else if (nType == ComponentType::R) {
-          // This is the case if resistor
+          break;
+        }
+        case ComponentType::GY: {
+          gys.push_back(x);
+          gyports.push_back(nport);
+          mygyports.push_back(myPort);
+          break;
+        }
+        case ComponentType::TF: {
+          tfs.push_back(x);
+          tfports.push_back(nport);
+          mytfports.push_back(myPort);
+          break;
+        }
+        case ComponentType::R: {
           rs.push_back(x); // pushed to Resistor vector
           rports.push_back(nport);
           myRports.push_back(myPort);
-        } else if (nType == ComponentType::SE || nType == ComponentType::SF) {
+          break;
+        }
+        case ComponentType::SE: {
           throw InCorrectComponentConnection(
-              std::format("Outgoing edge from {} to a source!", id));
-        } else {
-          // This is the case where you are connected to another junction!
-          // TODO: How do we handle this?
+              std::format("Outgoing edge from {} to an effort source!", id));
+          break;
+        }
+        case ComponentType::SF: {
+          throw InCorrectComponentConnection(
+              std::format("Outgoing edge from {} to a flow source!", id));
+          break;
+        }
+        case ComponentType::J0: {
+          js.push_back(x);
+          jports.push_back(nport);
+          myjports.push_back(myPort);
+          break;
+        }
+        case ComponentType::J1: {
+          js.push_back(x);
+          jports.push_back(nport);
+          myjports.push_back(myPort);
+          break;
+        }
         }
       }
+    }
+
+    // The below are giving preference to how to assign causality to
+    // different neighbours so that there is a high chance of everyone
+    // getting their preferred causality.
+
+    // Now assign to GY first
+    for (size_t i = 0; i < gys.size(); ++i) {
+      componentAssignAndPropagateGY(gys[i], gyports[i], mygyports[i], id,
+                                    assignedPorts, myType);
+    }
+    // Now assign the TF ports
+    for (size_t i = 0; i < tfs.size(); ++i) {
+      componentAssignAndPropagateTF(tfs[i], tfports[i], mytfports[i], id,
+                                    assignedPorts, myType);
+    }
+    // Now assign the junction ports
+    for (size_t i = 0; i < js.size(); ++i) {
+      componentAssignAndPropagateJ(js[i], jports[i], myjports[i], id,
+                                   assignedPorts, myType);
     }
     // Now we assign causality to rs.
     for (size_t i = 0; i < rs.size(); ++i) {
       componentAssignAndPropagateR(rs[i], rports[i], myRports[i], id,
                                    assignedPorts, myType);
     }
+
+    // Now check that every port in this junction is assigned and check
+    // that constraints are satisfied.
+    assignedPorts.clear();
+    for (size_t i = 0; i < numPorts; ++i) {
+      const Port *p = std::visit([&i](const auto &x) { return x.getPort(i); },
+                                 getComponentAt(id));
+      if (p->getAssigned()) {
+        assignedPorts.push_back(p);
+      }
+    }
+    if (assignedPorts.size() != numPorts) {
+      throw JunctionAssignment(
+          std::format("All of junction {}' port not assigned", id));
+    }
+    // All constraints on this junction are satisfied
+    std::visit([](const auto &x) { x.satisfyConstraints(); },
+               getComponentAt(id));
   }
 
   // This function gives the port of the id connected to parent ID (pid)
@@ -475,7 +588,7 @@ private:
             [&](const auto &y) -> ComponentType { return y.getType(); },
             getComponentAt(nid));
         counter += (nType == idType) ? 1 : 0;
-      }
+          }
       toret = counter == 1;
     }
     return toret;

@@ -137,7 +137,7 @@ private:
       else
         counter += x.getInCausality() == Causality::Effort ? 0 : 1;
     }
-    if (counter > 1) {
+    if (counter != 1) {
       throw JunctionContraintViolated(
           std::format("Junction {} cannot satisfy constraints\n", ID));
     }

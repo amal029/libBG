@@ -54,3 +54,12 @@ public:
   explicit JunctionContraintViolated(const std::string &msg) : message(msg) {}
   const char *what() const noexcept override { return message.c_str(); }
 };
+
+class JunctionAssignment : public std::exception {
+private:
+  const char* message;
+
+public:
+  explicit JunctionAssignment(const char *msg) : message(msg) {}
+  const char *what() const noexcept override { return message; }
+};
