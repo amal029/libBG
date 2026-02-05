@@ -106,22 +106,7 @@ template <ComponentType T> struct Component {
   constexpr bool getDeleted() const { return deleted; }
   constexpr const GiNaC::symbol &getValue() const { return value; }
 
-  constexpr void assignSourceCausality() {
-    if (ports.size() != 1) {
-      std::cerr << *this << "\n";
-      throw NumPorts("Number of ports incorrect\n");
-    }
-    if (myT == ComponentType::SE) {
-      ports[0].setOutCausality(Causality::Effort);
-      ports[0].setInCausality(Causality::Flow);
-    } else if (myT == ComponentType::SF) {
-      ports[0].setOutCausality(Causality::Flow);
-      ports[0].setInCausality(Causality::Effort);
-    }
-    ports[0].setAssigned();
-  }
-
-  void satisfyConstraints() const {
+  constexpr void satisfyConstraints() const {
     if (T == ComponentType::J0 || T == ComponentType::J1) {
       satisfyJunctionConstraints();
     }
