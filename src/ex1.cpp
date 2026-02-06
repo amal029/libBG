@@ -1,9 +1,11 @@
 #include "BondGraph.hpp"
 #include "Component.hpp"
+#include <ginac/ginac.h>
 
 #include <iostream>
 
 int main() {
+
   // Declare a Capacitor
   Component<ComponentType::C> c{"c", PrefCausality::I};    // capacitor
   Component<ComponentType::SE> se{"se"}; // voltage (effort) source
@@ -11,6 +13,7 @@ int main() {
   Component<ComponentType::J1> j{"1"};   // 1 Junction (in series)
 
   Component c1{std::move(c)};
+  
 
   // Add the components to the BondGraph
   BondGraph bg;

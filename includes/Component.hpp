@@ -32,9 +32,9 @@ enum class Causality : std::uint8_t { Flow = 0, Effort, ACausal };
 // The port structure of the component
 struct Port {
   Port() : in(Causality::ACausal), out(Causality::ACausal) {
-    size_t ID = Util::getID();
-    inx = GiNaC::symbol{"in" + std::to_string(ID)};
-    outx = GiNaC::symbol{"out" + std::to_string(ID)};
+    // size_t ID = Util::getID();
+    // inx = GiNaC::symbol{"in" + std::to_string(ID)};
+    // outx = GiNaC::symbol{"out" + std::to_string(ID)};
   }
   constexpr bool getAssigned() const { return assigned; }
   void setAssigned() { assigned = true; }  
@@ -45,20 +45,20 @@ struct Port {
   ~Port() {}
 
   // The public functions
-  void setInCausality(Causality c) { in = c; }
-  void setOutCausality(Causality c) { out = c; }
-  Causality getInCausality() const { return in; }
-  Causality getOutCausality() const { return out; }
-  const GiNaC::symbol &getInName() const { return inx; }
-  const GiNaC::symbol &getOutName() const { return outx; }
+  constexpr void setInCausality(Causality c) { in = c; }
+  constexpr void setOutCausality(Causality c) { out = c; }
+  constexpr Causality getInCausality() const { return in; }
+  constexpr Causality getOutCausality() const { return out; }
+  constexpr const GiNaC::ex &getInExpression() const { return inx; }
+  constexpr const GiNaC::ex &getOutExpression() const { return outx; }
 
 private:
   Causality in;  // The in causality
   Causality out; // The out causality for this port.
   bool assigned = false;
-  // The symbolic values each of these ports hold
-  GiNaC::symbol inx;
-  GiNaC::symbol outx;
+  // The symbolic values (expressions) each of these ports hold
+  GiNaC::ex inx;
+  GiNaC::ex outx;
 };
 
 // The common Component class
@@ -107,26 +107,20 @@ template <ComponentType T> struct Component {
   constexpr const GiNaC::symbol &getValue() const { return value; }
 
   constexpr void satisfyConstraints() const {
-    if (T == ComponentType::J0 || T == ComponentType::J1) {
-      satisfyJunctionConstraints();
-    }
-  }
-
-private:
-  void satisfyJunctionConstraints() const {
-    // Only 1 flow in for junction J1 and only 1 effort in for J0
     uint8_t counter = 0;
     for (const Port &x : ports) {
       if (T == ComponentType::J0)
         counter += x.getInCausality() == Causality::Effort ? 0 : 1;
       else
-        counter += x.getInCausality() == Causality::Effort ? 0 : 1;
+        counter += x.getInCausality() == Causality::Flow ? 0 : 1;
     }
     if (counter != 1) {
       throw JunctionContraintViolated(
           std::format("Junction {} cannot satisfy constraints\n", ID));
     }
   }
+
+private:
 
   ComponentType myT;
   const char *name; // The user name of the component
