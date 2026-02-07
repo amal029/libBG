@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Component.hpp"
+#include "ginac/symbol.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -9,6 +10,7 @@
 #include <iostream>
 #include <ostream>
 #include <stdexcept>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -70,8 +72,8 @@ struct BondGraph {
   template <ComponentType X, ComponentType Y>
   void connect(Component<X> &in, Component<Y> &out) {
     // First assign the port for the in and out
-    in.addPort(Port());
-    out.addPort(Port());
+    in.addPort(Port(PortType::OUT));
+    out.addPort(Port(PortType::IN));
     // Then update the adjacency list
     edges[in.getID()].push_back(out.getID());
     redges[out.getID()].push_back(in.getID()); // The reverse edge.
@@ -190,7 +192,60 @@ struct BondGraph {
     }
   }
 
+  // This will generate the state space system for the bond graph
+  void generateStateSpace() {
+    GiNaC::lst space; // add all equations output = f(input) to this list
+    // Get all the sources and move along the graph in dfs
+    std::vector<size_t> sources;
+    getSources(sources);
+    auto visitor = [&](auto &x) { addToSpace(space, x); };
+    // This is by default pre-order traversal
+    dfs(sources, visitor);
+  }
+
 private:
+  constexpr void addToSpace(GiNaC::lst &space,
+                            Component<ComponentType::SE> &x) const {
+    // FIXME: Fill this in
+    for (size_t i = 0; i < x.portSize(); ++i) {
+      Port *p = x.getPort(i);
+      // Is this an output port?
+      if (p->getPortType() == PortType::OUT &&
+          // Is its causality Effort?
+          p->getOutCausality() == Causality::Effort) {
+        // Now assign the source symbol to this port
+        p->getOut() = GiNaC::symbol(x.getName() + std::to_string(x.getID()));
+        space.append(p->getOut());
+      }
+    }
+    // Now add the equality of input of next component the output port
+    // is connected to should be equal to output expression p->getOut()
+  }
+  void addToSpace(GiNaC::lst &space, Component<ComponentType::SF> &x) const {
+    // FIXME: Fill this in
+  }
+  void addToSpace(GiNaC::lst &space, Component<ComponentType::C> &x) const {
+    // FIXME: Fill this in
+  }
+  void addToSpace(GiNaC::lst &space, Component<ComponentType::L> &x) const {
+    // FIXME: Fill this in
+  }
+  void addToSpace(GiNaC::lst &space, Component<ComponentType::TF> &x) const {
+    // FIXME: Fill this in
+  }
+  void addToSpace(GiNaC::lst &space, Component<ComponentType::GY> &x) const {
+    // FIXME: Fill this in
+  }
+  void addToSpace(GiNaC::lst &space, Component<ComponentType::J0> &x) const {
+    // FIXME: Fill this in
+  }
+  void addToSpace(GiNaC::lst &space, Component<ComponentType::J1> &x) const {
+    // FIXME: Fill this in
+  }
+  void addToSpace(GiNaC::lst &space, Component<ComponentType::R> &x) const {
+    // FIXME: Fill this in
+  }
+
   // There the causality is that of the output port
   void assignCausality(Port *out, Port *in, Causality caout, Causality cain) {
     out->setOutCausality(caout);
@@ -691,7 +746,7 @@ private:
             [&](const auto &y) -> ComponentType { return y.getType(); },
             getComponentAt(nid));
         counter += (nType == idType) ? 1 : 0;
-          }
+      }
       toret = counter == 1;
     }
     return toret;
@@ -725,7 +780,7 @@ private:
         redges[nid].push_back(x);
         // Add port to nid component
         componentVariant &nComponent = getComponentAt(nid);
-        std::visit([](auto &c) { c.addPort(Port()); }, nComponent);
+        std::visit([](auto &c) { c.addPort(Port(PortType::IN)); }, nComponent);
       }
     }
 
@@ -742,7 +797,7 @@ private:
         edges[nid].push_back(x);
         // Add port to nid component
         componentVariant &nComponent = getComponentAt(nid);
-        std::visit([](auto &c) { c.addPort(Port()); }, nComponent);
+        std::visit([](auto &c) { c.addPort(Port(PortType::OUT)); }, nComponent);
       }
     }
     // Set this node to deleted

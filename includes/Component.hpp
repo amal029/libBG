@@ -1,17 +1,17 @@
 #pragma once
 
+#include "exception.hpp"
+#include "ginac/symbol.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <format>
+#include <ginac/ginac.h>
 #include <iostream>
 #include <ostream>
 #include <string>
 #include <vector>
-#include <format>
-#include "exception.hpp"
-#include "ginac/symbol.h"
-#include <ginac/ginac.h>
 
 struct Util {
   static size_t getID() {
@@ -29,15 +29,18 @@ enum class PrefCausality : std::uint8_t { I = 0, D, N };
 // The different types of causality
 enum class Causality : std::uint8_t { Flow = 0, Effort, ACausal };
 
+// The type of port, IN or OUT
+enum class PortType : std::uint8_t { IN = 0, OUT };
+
 // The port structure of the component
 struct Port {
-  Port() : in(Causality::ACausal), out(Causality::ACausal) {
+  Port(PortType t) : in(Causality::ACausal), out(Causality::ACausal), mType(t) {
     // size_t ID = Util::getID();
     // inx = GiNaC::symbol{"in" + std::to_string(ID)};
     // outx = GiNaC::symbol{"out" + std::to_string(ID)};
   }
   constexpr bool getAssigned() const { return assigned; }
-  void setAssigned() { assigned = true; }  
+  void setAssigned() { assigned = true; }
   Port(const Port &) = delete;
   Port(Port &&) = default;
   Port &operator=(const Port &) = delete;
@@ -51,11 +54,15 @@ struct Port {
   constexpr Causality getOutCausality() const { return out; }
   constexpr const GiNaC::ex &getInExpression() const { return inx; }
   constexpr const GiNaC::ex &getOutExpression() const { return outx; }
+  constexpr PortType getPortType() const { return mType; }
+  GiNaC::ex &getOut() { return outx; }
+  GiNaC::ex &getIn() { return inx; }
 
 private:
   Causality in;  // The in causality
   Causality out; // The out causality for this port.
   bool assigned = false;
+  PortType mType;
   // The symbolic values (expressions) each of these ports hold
   GiNaC::ex inx;
   GiNaC::ex outx;
@@ -121,7 +128,6 @@ template <ComponentType T> struct Component {
   }
 
 private:
-
   ComponentType myT;
   const char *name; // The user name of the component
   size_t ID;        // The unique ID generated internally for each component
