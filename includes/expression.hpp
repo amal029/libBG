@@ -63,6 +63,7 @@ static std::ostream &operator<<(std::ostream &os, const expression_t &in) {
 
 struct expressionAst {
   expressionAst() {}
+  [[nodiscard]]
   expression_t *append(std::unique_ptr<expression_t> &&x) {
     arena.emplace_back(std::move(x));
     return arena[arena.size() - 1].get();

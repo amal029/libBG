@@ -8,6 +8,7 @@
 #include <cstring>
 #include <format>
 #include <iostream>
+#include <numeric>
 #include <ostream>
 #include <stdexcept>
 #include <string>
@@ -211,49 +212,29 @@ private:
     for (size_t i = 0; i < edges[myID].size(); ++i) {
       Port *myOutPort = x.getPort(i + numRedges);
       Port *nInPort = getCausalPort(edges[myID][i], myID);
-      nInPort->setInExpression(myOutPort->getOutExpression()) ;
-      // space.append(nInPort->getIn() = myOutPort->getOut());
+      nInPort->setInExpression(myOutPort->getOutExpression());
+      myOutPort->setInExpression(nInPort->getOutExpression());
     }
   }
   constexpr void addToSpace(expressionAst &space,
                             Component<ComponentType::SE> &x) {
-    size_t myID = x.getID();
-    const size_t numRedges = redges[myID].size();
-    for (size_t i = 0; i < edges[myID][i]; ++i) {
-      Port *myOutPort = x.getPort(i + numRedges);
-      if (myOutPort->getPortType() == PortType::OUT &&
-          // Is its causality Effort?
-          myOutPort->getOutCausality() == Causality::Effort) {
-        // Now assign the source symbol to this port
-        expression_t *p = space.append(make_expr(
-            Symbol((x.getName() + std::to_string(x.getID())).c_str())));
-        myOutPort->setOutExpression(p);
-      }
-    }
-    // Now add the equality of input of next component the output port
+    assert(x.portSize() == 1);
+    Port *outport = x.getPort(0);
+    assert(outport->getPortType() == PortType::OUT &&
+           outport->getOutCausality() == Causality::Effort);
+    // Now assign the source symbol to this port
+    expression_t *p = space.append(make_expr(x.getValue()));
+    outport->setOutExpression(p);
     OutputsEqualInputs(space, x);
   }
   void addToSpace(expressionAst &space, Component<ComponentType::SF> &x) {
-    // FIXME: Fill this in
-    size_t myID = x.getID();
-    const size_t numRedges = redges[myID].size();
-    for (size_t i = 0; i < edges[myID][i]; ++i) {
-      Port *myOutPort = x.getPort(i + numRedges);
-      if (myOutPort->getPortType() == PortType::OUT &&
-          // Is its causality Effort?
-          myOutPort->getOutCausality() == Causality::Flow) {
-        // Now assign the source symbol to this port
-        expression_t *p = space.append(make_expr(
-            Symbol((x.getName() + std::to_string(x.getID())).c_str())));
-        myOutPort->setOutExpression(p);
-        //
-        // myOutPort->getOut() =
-        //     GiNaC::symbol(x.getName() + std::to_string(x.getID()));
-        // space.append(myOutPort->getOut());
-      }
-    }
-    // Now add the equality of input of next component the output port
-    // is connected to should be equal to output expression p->getOut()
+    assert(x.portSize() == 1);
+    Port *outport = x.getPort(0);
+    assert(outport->getPortType() == PortType::OUT &&
+           outport->getOutCausality() == Causality::Flow);
+    // Now assign the source symbol to this port
+    expression_t *p = space.append(make_expr(x.getValue()));
+    outport->setOutExpression(p);
     OutputsEqualInputs(space, x);
   }
   void addToSpace(expressionAst &space, Component<ComponentType::C> &x) const {
@@ -263,28 +244,178 @@ private:
     bool isIntegral = inport->getOutCausality() == Causality::Effort;
     if (isIntegral) {
       // This has integral causality.
-      
+      x.setInternalExpression(inport->getInExpression());
+      // Now set the output of inPort
+      // First push the Div operation into space.
+      expression_t *value =
+          space.append(make_expr(x.getValue())); // value copied here
+      expression_t *div = space.append(
+          make_expr(Expression<EOP::DIV>(inport->getInExpression(), value)));
+      inport->setOutExpression(div);
     } else {
       // Differential causality
+      throw NotYetImplemented("Differential equality for C");
     }
   }
   void addToSpace(expressionAst &space, Component<ComponentType::L> &x) const {
-    // FIXME: Fill this in
+    assert(x.portSize() == 1);
+    Port *inport = x.getPort(0);
+    assert(inport->getPortType() == PortType::IN);
+    bool isIntegral = inport->getOutCausality() == Causality::Flow;
+    if (isIntegral) {
+      expression_t *value =
+          space.append(make_expr(x.getValue())); // value copied here
+      expression_t *div = space.append(
+          make_expr(Expression<EOP::DIV>(inport->getInExpression(), value)));
+      inport->setOutExpression(div);
+    } else {
+      throw NotYetImplemented("Differential equality for L");
+    }
   }
-  void addToSpace(expressionAst &space, Component<ComponentType::TF> &x) const {
-    // FIXME: Fill this in
+
+  // This function is shared between TF/GY for building the state space.
+  void addToSpaceTFGY(expressionAst &space, Port *inport, Port *outport,
+                      expression_t *value) {
+    if (inport->getOutCausality() == Causality::Effort) {
+      // outExpression of inport = inExpression of outport * value
+      expression_t *res = space.append(
+          make_expr(Expression<EOP::MUL>(outport->getInExpression(), value)));
+      inport->setOutExpression(res);
+      // Now do the flow
+      // outputExpression of outport = inExpression of inport * value
+      expression_t *res1 = space.append(
+          make_expr(Expression<EOP::MUL>(inport->getInExpression(), value)));
+      outport->setOutExpression(res1);
+    } else {
+      // This is the flow out from input..same as above, except div
+      expression_t *res = space.append(
+          make_expr(Expression<EOP::DIV>(outport->getInExpression(), value)));
+      inport->setOutExpression(res);
+      // Now do the flow
+      // outputExpression of outport = inExpression of inport * value
+      expression_t *res1 = space.append(
+          make_expr(Expression<EOP::DIV>(inport->getInExpression(), value)));
+      outport->setOutExpression(res1);
+    }
   }
-  void addToSpace(expressionAst &space, Component<ComponentType::GY> &x) const {
-    // FIXME: Fill this in
+  void addToSpace(expressionAst &space, Component<ComponentType::TF> &x) {
+    assert(x.portSize() == 2);
+    Port *inport = x.getPort(0);
+    assert(inport->getPortType() == PortType::IN);
+    Port *outport = x.getPort(1);
+    assert(outport->getPortType() == PortType::OUT);
+    assert((inport->getOutCausality() == Causality::Effort &&
+            outport->getOutCausality() == Causality::Effort) ||
+           (inport->getOutCausality() == Causality::Flow &&
+            outport->getOutCausality() == Causality::Flow));
+    expression_t *value = space.append(make_expr(x.getValue()));
+    addToSpaceTFGY(space, inport, outport, value);
+    OutputsEqualInputs(space, x);
   }
-  void addToSpace(expressionAst &space, Component<ComponentType::J0> &x) const {
-    // FIXME: Fill this in
+  void addToSpace(expressionAst &space, Component<ComponentType::GY> &x) {
+    assert(x.portSize() == 2);
+    Port *inport = x.getPort(0);
+    assert(inport->getPortType() == PortType::IN);
+    Port *outport = x.getPort(1);
+    assert(outport->getPortType() == PortType::OUT);
+    assert((inport->getOutCausality() == Causality::Effort &&
+            outport->getOutCausality() == Causality::Flow) ||
+           (inport->getOutCausality() == Causality::Flow &&
+            outport->getOutCausality() == Causality::Effort));
+    expression_t *value = space.append(make_expr(x.getValue()));
+    addToSpaceTFGY(space, inport, outport, value);
+    OutputsEqualInputs(space, x);
   }
-  void addToSpace(expressionAst &space, Component<ComponentType::J1> &x) const {
-    // FIXME: Fill this in
+  void addToSpaceJ0J1(expressionAst &space, Port *mainPort,
+                      std::vector<Port *> others) {
+    for (Port *pp : others) {
+      pp->setOutExpression(mainPort->getInExpression());
+    }
+    // Now handle the sum of flows
+    std::vector<PortType> otherPortTypes;
+    otherPortTypes.reserve(others.size());
+    for (Port *pp : others) {
+      otherPortTypes.push_back(pp->getPortType());
+    }
+    std::vector<expression_t *> nv;
+    nv.reserve(others.size());
+    // Now if the port type is output then transform its inputExpression
+    for (size_t i = 0; i < others.size(); ++i) {
+      Port *oport = others[i];
+      PortType oport_t = otherPortTypes[i];
+      if (oport_t == PortType::OUT) {
+        expression_t *ee = space.append(make_expr(Number(-1)));
+        expression_t *ee1 = space.append(
+            make_expr(Expression<EOP::MUL>(ee, oport->getInExpression())));
+        nv.push_back(ee1);
+      } else {
+        nv.push_back(oport->getInExpression());
+      }
+    }
+    expression_t *init = space.append(make_expr(Number(0)));
+
+    expression_t *res =
+        std::accumulate(nv.begin(), nv.end(), init,
+                        [&space](expression_t *init, expression_t *value) {
+                          expression_t *r = space.append(
+                              make_expr(Expression<EOP::ADD>(init, value)));
+                          return r;
+                        });
+    mainPort->setOutExpression(res);
+  }
+  void addToSpace(expressionAst &space, Component<ComponentType::J0> &x) {
+    // First get the main port with out causality of Effort
+    Port *mainPort;
+    std::vector<Port *> others;
+    for (size_t i = 0; i < x.portSize(); ++i) {
+      Port *pp = x.getPort(i);
+      if (pp->getInCausality() == Causality::Effort) {
+        mainPort = pp;
+      } else {
+        others.push_back(pp);
+      }
+    }
+    assert(others.size() >=
+           2); // There should be at least 2 non main type ports
+    assert(mainPort->getOutCausality() == Causality::Flow);
+    addToSpaceJ0J1(space, mainPort, others);
+    // Now set the equality constraints for all the other outputs
+    OutputsEqualInputs(space, x);
+  }
+  void addToSpace(expressionAst &space, Component<ComponentType::J1> &x) {
+    // First get the main port with out causality of Effort
+    Port *mainPort;
+    std::vector<Port *> others;
+    for (size_t i = 0; i < x.portSize(); ++i) {
+      Port *pp = x.getPort(i);
+      if (pp->getInCausality() == Causality::Flow) {
+        mainPort = pp;
+      } else {
+        others.push_back(pp);
+      }
+    }
+    assert(others.size() >=
+           2); // There should be at least 2 non main type ports
+    assert(mainPort->getOutCausality() == Causality::Effort);
+    addToSpaceJ0J1(space, mainPort, others);
+    // Now set the equality constraints for all the other outputs
+    OutputsEqualInputs(space, x);
   }
   void addToSpace(expressionAst &space, Component<ComponentType::R> &x) const {
-    // FIXME: Fill this in
+    assert(x.portSize() == 1);
+    Port *inport = x.getPort(0);
+    assert(inport->getPortType() == PortType::IN);
+    bool isIntegral = inport->getOutCausality() == Causality::Effort;
+    expression_t *value = space.append(make_expr(x.getValue()));
+    expression_t *out;
+    if (isIntegral) {
+      out = space.append(
+          make_expr(Expression<EOP::MUL>(inport->getInExpression(), value)));
+    } else {
+      out = space.append(
+          make_expr(Expression<EOP::DIV>(inport->getInExpression(), value)));
+    }
+    inport->setOutExpression(out);
   }
 
   // There the causality is that of the output port
@@ -327,8 +458,6 @@ private:
       // Here I don't care about the type just assign preferred
       // causality -- effort out and flow in
       integralCausality();
-      std::visit([](auto &x) { x.setPrefCausality(PrefCausality::I); },
-                 getComponentAt(myId));
     } else {
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
@@ -336,11 +465,7 @@ private:
         std::cerr << std::format("Assigning differential causality to {}",
                                  myId);
         diffCausality();
-        std::visit([](auto &x) { x.setPrefCausality(PrefCausality::D); },
-                   getComponentAt(myId));
       } else {
-        std::visit([](auto &x) { x.setPrefCausality(PrefCausality::I); },
-                   getComponentAt(myId));
         integralCausality();
       }
     }
@@ -367,8 +492,6 @@ private:
       // Here I don't care about the type just assign preferred
       // causality -- effort out and flow in
       integralCausality();
-      std::visit([](auto &x) { x.setPrefCausality(PrefCausality::I); },
-                 getComponentAt(myId));
     } else {
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
@@ -376,12 +499,8 @@ private:
         std::cerr << std::format("Assigning differential causality to {}",
                                  myId);
         diffCausality();
-        std::visit([](auto &x) { x.setPrefCausality(PrefCausality::D); },
-                   getComponentAt(myId));
       } else {
         integralCausality();
-        std::visit([](auto &x) { x.setPrefCausality(PrefCausality::I); },
-                   getComponentAt(myId));
       }
     }
     if (edges[myId].size() > 0) {

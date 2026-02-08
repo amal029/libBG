@@ -54,10 +54,8 @@ struct Port {
   constexpr PortType getPortType() const { return mType; }
   void setOutExpression(expression_t *v) { outx = v; }
   void setInExpression(expression_t *v) { inx = v; }
-  void setInternalExpression(expression_t *v) { internal = v; }
   expression_t *getOutExpression() const { return outx; }
   expression_t *getInExpression() const { return inx; }
-  expression_t *getInternalExpression() const { return internal; }
 
 private:
   Causality in;  // The in causality
@@ -67,7 +65,6 @@ private:
   // The symbolic values (expressions) each of these ports hold
   expression_t *inx;
   expression_t *outx;
-  expression_t *internal; // This is only for C/R/L
 };
 
 // The common Component class
@@ -108,7 +105,7 @@ template <ComponentType T> struct Component {
   // Deleted means deleted from the bond graph
   constexpr void setDeleted() { deleted = true; }
   constexpr bool getDeleted() const { return deleted; }
-  constexpr const expression_t &getValue() const { return value; }
+  constexpr expression_t getValue() const { return value; }
 
   constexpr void satisfyConstraints() const {
     uint8_t counter = 0;
@@ -124,19 +121,20 @@ template <ComponentType T> struct Component {
     }
   }
   // Get Pref Causality
-  PrefCausality getPrefCausality() const { return mPref; }
-  void setPrefCausality(PrefCausality pref) { mPref = pref; }
+  void setInternalExpression(expression_t *v) { internal = v; }
+  expression_t *getInternalExpression() const { return internal; }
+  
 
 private:
   ComponentType myT;
   const char *name; // The user name of the component
   size_t ID;        // The unique ID generated internally for each component
-  PrefCausality mPref = PrefCausality::N;
   std::vector<Port> ports; // The number of ports of this component
   bool deleted = false;    // Has this been deleted from the graph
                            // during simplification.
   // The symbolic value of this component
   expression_t value;
+  expression_t *internal; // This is only for C/R/L
 };
 
 // Printing the enum
