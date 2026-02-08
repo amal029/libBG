@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Component.hpp"
-#include "ginac/symbol.h"
+#include "expression.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -194,55 +194,96 @@ struct BondGraph {
 
   // This will generate the state space system for the bond graph
   void generateStateSpace() {
-    GiNaC::lst space; // add all equations output = f(input) to this list
+    expressionAst ast;
     // Get all the sources and move along the graph in dfs
     std::vector<size_t> sources;
     getSources(sources);
-    auto visitor = [&](auto &x) { addToSpace(space, x); };
+    auto visitor = [&](auto &x) { addToSpace(ast, x); };
     // This is by default pre-order traversal
     dfs(sources, visitor);
   }
 
 private:
-  constexpr void addToSpace(GiNaC::lst &space,
-                            Component<ComponentType::SE> &x) const {
-    // FIXME: Fill this in
-    for (size_t i = 0; i < x.portSize(); ++i) {
-      Port *p = x.getPort(i);
-      // Is this an output port?
-      if (p->getPortType() == PortType::OUT &&
+  template <ComponentType T>
+  constexpr void OutputsEqualInputs(expressionAst &space, Component<T> &x) {
+    size_t myID = x.getID();
+    const size_t numRedges = redges[myID].size();
+    for (size_t i = 0; i < edges[myID].size(); ++i) {
+      Port *myOutPort = x.getPort(i + numRedges);
+      Port *nInPort = getCausalPort(edges[myID][i], myID);
+      nInPort->setInExpression(myOutPort->getOutExpression()) ;
+      // space.append(nInPort->getIn() = myOutPort->getOut());
+    }
+  }
+  constexpr void addToSpace(expressionAst &space,
+                            Component<ComponentType::SE> &x) {
+    size_t myID = x.getID();
+    const size_t numRedges = redges[myID].size();
+    for (size_t i = 0; i < edges[myID][i]; ++i) {
+      Port *myOutPort = x.getPort(i + numRedges);
+      if (myOutPort->getPortType() == PortType::OUT &&
           // Is its causality Effort?
-          p->getOutCausality() == Causality::Effort) {
+          myOutPort->getOutCausality() == Causality::Effort) {
         // Now assign the source symbol to this port
-        p->getOut() = GiNaC::symbol(x.getName() + std::to_string(x.getID()));
-        space.append(p->getOut());
+        expression_t *p = space.append(make_expr(
+            Symbol((x.getName() + std::to_string(x.getID())).c_str())));
+        myOutPort->setOutExpression(p);
+      }
+    }
+    // Now add the equality of input of next component the output port
+    OutputsEqualInputs(space, x);
+  }
+  void addToSpace(expressionAst &space, Component<ComponentType::SF> &x) {
+    // FIXME: Fill this in
+    size_t myID = x.getID();
+    const size_t numRedges = redges[myID].size();
+    for (size_t i = 0; i < edges[myID][i]; ++i) {
+      Port *myOutPort = x.getPort(i + numRedges);
+      if (myOutPort->getPortType() == PortType::OUT &&
+          // Is its causality Effort?
+          myOutPort->getOutCausality() == Causality::Flow) {
+        // Now assign the source symbol to this port
+        expression_t *p = space.append(make_expr(
+            Symbol((x.getName() + std::to_string(x.getID())).c_str())));
+        myOutPort->setOutExpression(p);
+        //
+        // myOutPort->getOut() =
+        //     GiNaC::symbol(x.getName() + std::to_string(x.getID()));
+        // space.append(myOutPort->getOut());
       }
     }
     // Now add the equality of input of next component the output port
     // is connected to should be equal to output expression p->getOut()
+    OutputsEqualInputs(space, x);
   }
-  void addToSpace(GiNaC::lst &space, Component<ComponentType::SF> &x) const {
+  void addToSpace(expressionAst &space, Component<ComponentType::C> &x) const {
+    assert(x.portSize() == 1);
+    Port *inport = x.getPort(0);
+    assert(inport->getPortType() == PortType::IN);
+    bool isIntegral = inport->getOutCausality() == Causality::Effort;
+    if (isIntegral) {
+      // This has integral causality.
+      
+    } else {
+      // Differential causality
+    }
+  }
+  void addToSpace(expressionAst &space, Component<ComponentType::L> &x) const {
     // FIXME: Fill this in
   }
-  void addToSpace(GiNaC::lst &space, Component<ComponentType::C> &x) const {
+  void addToSpace(expressionAst &space, Component<ComponentType::TF> &x) const {
     // FIXME: Fill this in
   }
-  void addToSpace(GiNaC::lst &space, Component<ComponentType::L> &x) const {
+  void addToSpace(expressionAst &space, Component<ComponentType::GY> &x) const {
     // FIXME: Fill this in
   }
-  void addToSpace(GiNaC::lst &space, Component<ComponentType::TF> &x) const {
+  void addToSpace(expressionAst &space, Component<ComponentType::J0> &x) const {
     // FIXME: Fill this in
   }
-  void addToSpace(GiNaC::lst &space, Component<ComponentType::GY> &x) const {
+  void addToSpace(expressionAst &space, Component<ComponentType::J1> &x) const {
     // FIXME: Fill this in
   }
-  void addToSpace(GiNaC::lst &space, Component<ComponentType::J0> &x) const {
-    // FIXME: Fill this in
-  }
-  void addToSpace(GiNaC::lst &space, Component<ComponentType::J1> &x) const {
-    // FIXME: Fill this in
-  }
-  void addToSpace(GiNaC::lst &space, Component<ComponentType::R> &x) const {
+  void addToSpace(expressionAst &space, Component<ComponentType::R> &x) const {
     // FIXME: Fill this in
   }
 
@@ -286,6 +327,8 @@ private:
       // Here I don't care about the type just assign preferred
       // causality -- effort out and flow in
       integralCausality();
+      std::visit([](auto &x) { x.setPrefCausality(PrefCausality::I); },
+                 getComponentAt(myId));
     } else {
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
@@ -293,7 +336,11 @@ private:
         std::cerr << std::format("Assigning differential causality to {}",
                                  myId);
         diffCausality();
+        std::visit([](auto &x) { x.setPrefCausality(PrefCausality::D); },
+                   getComponentAt(myId));
       } else {
+        std::visit([](auto &x) { x.setPrefCausality(PrefCausality::I); },
+                   getComponentAt(myId));
         integralCausality();
       }
     }
@@ -320,6 +367,8 @@ private:
       // Here I don't care about the type just assign preferred
       // causality -- effort out and flow in
       integralCausality();
+      std::visit([](auto &x) { x.setPrefCausality(PrefCausality::I); },
+                 getComponentAt(myId));
     } else {
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
@@ -327,8 +376,12 @@ private:
         std::cerr << std::format("Assigning differential causality to {}",
                                  myId);
         diffCausality();
+        std::visit([](auto &x) { x.setPrefCausality(PrefCausality::D); },
+                   getComponentAt(myId));
       } else {
         integralCausality();
+        std::visit([](auto &x) { x.setPrefCausality(PrefCausality::I); },
+                   getComponentAt(myId));
       }
     }
     if (edges[myId].size() > 0) {
@@ -656,6 +709,7 @@ private:
     Port *myPort =
         std::visit([&index](auto &x) -> Port * { return x.getPort(index); },
                    getComponentAt(id));
+    assert(myPort->getPortType() == PortType::IN);
     return myPort;
   }
 

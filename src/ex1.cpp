@@ -1,21 +1,27 @@
 #include "BondGraph.hpp"
 #include "Component.hpp"
-#include <ginac/ginac.h>
-
 #include <iostream>
 
 int main() {
 
+  // Example of an expression
+  expressionAst ast;
+  ast.append(make_expr(Symbol("x")));
+  ast.append(make_expr(Number(10)));
+  ast.append(make_expr(
+      Expression<EOP::MUL>(ast[ast.size() - 1], ast[ast.size() - 2])));
+  ast.printExpression(std::cout, ast[ast.size() - 1]);
+  std::cout << "\n";
+
   // Declare a Capacitor
-  Component<ComponentType::C> c{"c", PrefCausality::I};    // capacitor
+  Component<ComponentType::C> c{"c"};    // capacitor
   Component<ComponentType::SE> se{"se"}; // voltage (effort) source
   Component<ComponentType::R> r{"r"};    // resistor
   Component<ComponentType::J1> j{"1"};   // 1 Junction (in series)
 
   Component c1{std::move(c)};
-  
 
-  // Add the components to the BondGraph
+  // // Add the components to the BondGraph
   BondGraph bg;
   bg.addComponent(std::move(c1));
   bg.addComponent(std::move(se));
@@ -27,7 +33,8 @@ int main() {
   // Make the connections -- we don't have to do it this way. We can use
   // the moved object, but be careful in that case -- it is
   // implementation defined then.
-  bg.connect(bg.getComponent<ComponentType::SE>("se"), j1);
+  bg.connect(bg.getComponent<ComponentType::SE>("se"),
+             j1); // This causes seg fault??
   bg.connect(j1, bg.getComponent<ComponentType::R>("r"));
   bg.connect(j1, bg.getComponent<ComponentType::C>("c"));
 

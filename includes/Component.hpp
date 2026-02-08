@@ -1,13 +1,12 @@
 #pragma once
 
 #include "exception.hpp"
-#include "ginac/symbol.h"
+#include "expression.hpp"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <format>
-#include <ginac/ginac.h>
 #include <iostream>
 #include <ostream>
 #include <string>
@@ -52,11 +51,13 @@ struct Port {
   constexpr void setOutCausality(Causality c) { out = c; }
   constexpr Causality getInCausality() const { return in; }
   constexpr Causality getOutCausality() const { return out; }
-  constexpr const GiNaC::ex &getInExpression() const { return inx; }
-  constexpr const GiNaC::ex &getOutExpression() const { return outx; }
   constexpr PortType getPortType() const { return mType; }
-  GiNaC::ex &getOut() { return outx; }
-  GiNaC::ex &getIn() { return inx; }
+  void setOutExpression(expression_t *v) { outx = v; }
+  void setInExpression(expression_t *v) { inx = v; }
+  void setInternalExpression(expression_t *v) { internal = v; }
+  expression_t *getOutExpression() const { return outx; }
+  expression_t *getInExpression() const { return inx; }
+  expression_t *getInternalExpression() const { return internal; }
 
 private:
   Causality in;  // The in causality
@@ -64,20 +65,16 @@ private:
   bool assigned = false;
   PortType mType;
   // The symbolic values (expressions) each of these ports hold
-  GiNaC::ex inx;
-  GiNaC::ex outx;
+  expression_t *inx;
+  expression_t *outx;
+  expression_t *internal; // This is only for C/R/L
 };
 
 // The common Component class
 template <ComponentType T> struct Component {
   constexpr Component() {} // This is for Bond Graph insertion
-  constexpr Component(const char *n, PrefCausality Pref = PrefCausality::N)
-      : myT(T), name(n), ID(Util::getID()), mPref(Pref) {
-    // Static assert that Pref causality can only be given for components that
-    // are not junctions
-    assert((T != ComponentType::J0 || Pref == PrefCausality::N) &&
-           (T != ComponentType::J1 || Pref == PrefCausality::N));
-    value = GiNaC::symbol{name + std::to_string(ID)};
+  constexpr Component(const char *n) : myT(T), name(n), ID(Util::getID()) {
+    value = Symbol{(name + std::to_string(ID)).c_str()};
   }
   constexpr Component(const Component &) = delete; // Copy constructor is
                                                    // deleted
@@ -111,7 +108,7 @@ template <ComponentType T> struct Component {
   // Deleted means deleted from the bond graph
   constexpr void setDeleted() { deleted = true; }
   constexpr bool getDeleted() const { return deleted; }
-  constexpr const GiNaC::symbol &getValue() const { return value; }
+  constexpr const expression_t &getValue() const { return value; }
 
   constexpr void satisfyConstraints() const {
     uint8_t counter = 0;
@@ -126,17 +123,20 @@ template <ComponentType T> struct Component {
           std::format("Junction {} cannot satisfy constraints\n", ID));
     }
   }
+  // Get Pref Causality
+  PrefCausality getPrefCausality() const { return mPref; }
+  void setPrefCausality(PrefCausality pref) { mPref = pref; }
 
 private:
   ComponentType myT;
   const char *name; // The user name of the component
   size_t ID;        // The unique ID generated internally for each component
-  PrefCausality mPref;
+  PrefCausality mPref = PrefCausality::N;
   std::vector<Port> ports; // The number of ports of this component
   bool deleted = false;    // Has this been deleted from the graph
                            // during simplification.
   // The symbolic value of this component
-  GiNaC::symbol value;
+  expression_t value;
 };
 
 // Printing the enum
