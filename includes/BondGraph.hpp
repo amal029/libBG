@@ -15,6 +15,14 @@
 #include <variant>
 #include <vector>
 
+#define DEBUG(i)                                                               \
+  do {                                                                         \
+    std::visit([](const auto &x) { std::cout << x << "\n"; },                  \
+               getComponentAt(i));                                             \
+  } while (0)
+
+#define DEBUG_COMPONENT(x) (std::cout << (x) << "\n");
+
 // This is the variant with all the different components
 using componentVariant =
     std::variant<Component<ComponentType::C>, Component<ComponentType::L>,
@@ -65,8 +73,7 @@ struct BondGraph {
         break;
     }
     if (!found) {
-      throw NotFound(
-          std::format("Component named {} not found!", name));
+      throw NotFound(std::format("Component named {} not found!", name));
     }
     return std::get<Component<T>>(components[i]);
   }
@@ -149,8 +156,6 @@ struct BondGraph {
     // First get all the sources
     std::vector<size_t> sources;
     getSources(sources); // These are all the sources
-    // Now assign the ports for all the sources and their neighbor
-    // junctions for all of these fixed causality sources.
 
     // There can be only a single output for a given source
     for (const auto &s : sources) {
@@ -169,7 +174,6 @@ struct BondGraph {
         throw std::runtime_error(
             std::format("Source {} has incorrect type", s));
       }
-
       assignGYTFSourceOutoingCausality(s, out, in, false);
     }
 
@@ -225,10 +229,9 @@ private:
   }
 
   template <ComponentType T> void simplify2(Component<T> &x) {
-    size_t id = x.getID();
     if ((T == ComponentType::J0 || T == ComponentType::J1) &&
         canContractJunction(x)) {
-      contractJunction(id);
+      contractJunction(x);
     }
   }
 
@@ -692,6 +695,7 @@ private:
     for (size_t i = 0; i < numPorts; ++i) {
       const Port *p = std::visit([&i](const auto &x) { return x.getPort(i); },
                                  getComponentAt(id));
+      // If p is not already in assignedPorts and is assigned then add
       if (p->getAssigned()) {
         assignedPorts.push_back(p);
       }
@@ -722,17 +726,13 @@ private:
 
     ComponentType myType = std::visit([](const auto &x) { return x.getType(); },
                                       getComponentAt(id));
-    const size_t numRedges = redges[id].size();
-    componentVariant &me = getComponentAt(id);
-    // Preferred causality neighbours first then indifferent causality
+
     for (size_t counter = 0; counter < edges[id].size(); ++counter) {
       size_t x = edges[id][counter];
-      // IMPORTANT: This means that all reverse edge (incoming) ports
-      // come first and then the outgoing (ports) edges come
       Port *myPort =
-          std::visit([&counter, &numRedges](
-                         auto &x) { return x.getPort(numRedges + counter); },
-                     me);
+          std::visit([&x](auto &y) { return y.getPortWithNeighbourID(x); },
+                     getComponentAt(id));
+      assert(myPort->getPortType() == PortType::OUT);
       Port *nport = getCausalPort(x, id);
       // If port not yet assigned then
       if (!nport->getAssigned()) {
@@ -744,11 +744,13 @@ private:
         case ComponentType::C: {
           componentAssignAndPropagateC(x, nport, myPort, id, assignedPorts,
                                        myType);
+	  assignedPorts.push_back(myPort);
           break;
         }
         case ComponentType::L: {
           componentAssignAndPropagateL(x, nport, myPort, id, assignedPorts,
                                        myType);
+          assignedPorts.push_back(myPort);
           break;
         }
         case ComponentType::GY: {
@@ -803,21 +805,25 @@ private:
     for (size_t i = 0; i < gys.size(); ++i) {
       componentAssignAndPropagateGY(gys[i], gyports[i], mygyports[i], id,
                                     assignedPorts, myType);
+      assignedPorts.push_back(mygyports[i]);
     }
     // Now assign the TF ports
     for (size_t i = 0; i < tfs.size(); ++i) {
       componentAssignAndPropagateTF(tfs[i], tfports[i], mytfports[i], id,
                                     assignedPorts, myType);
+      assignedPorts.push_back(mytfports[i]);      
     }
     // Now assign the junction ports
     for (size_t i = 0; i < js.size(); ++i) {
       componentAssignAndPropagateJ(js[i], jports[i], myjports[i], id,
                                    assignedPorts, myType);
+      assignedPorts.push_back(myjports[i]);
     }
     // Now we assign causality to rs.
     for (size_t i = 0; i < rs.size(); ++i) {
       componentAssignAndPropagateR(rs[i], rports[i], myRports[i], id,
                                    assignedPorts, myType);
+      assignedPorts.push_back(myRports[i]);
     }
 
     // Now check that every port in this junction is assigned and check
@@ -842,19 +848,9 @@ private:
   // This function gives the port of the id connected to parent ID (pid)
   // component
   constexpr Port *getCausalPort(size_t id, size_t pid) {
-    // Here pid is the id of the parent I should be connected to.
-    // Get the index of the pid from redges
-    auto res = std::find(redges[id].begin(), redges[id].end(), pid);
-    if (res == redges[id].end()) {
-      throw InCorrectComponentConnection(
-          std::format("Junction {} not connected to {}", id, pid));
-    }
     // Get the port with the pid as neighbour
     Port *myPort = std::visit(
-        [&pid](auto &x) -> Port * {
-          Port *toret = x.getPortWithNeighbourID(pid);
-          return toret;
-        },
+        [&pid](auto &x) -> Port * { return x.getPortWithNeighbourID(pid); },
         getComponentAt(id));
     assert(myPort->getPortType() == PortType::IN);
     return myPort;
@@ -868,27 +864,17 @@ private:
       throw NumEdges(
           std::format("Component {} has incorrect number of edges\n", id));
     }
-    size_t numRedges = redges[id].size();
+    size_t nid = edges[id][0]; // neighbour id
     // Now assign the given causality to the outgoing port
-    Port *myPort =
-        std::visit([&numRedges](auto &x) { return x.getPort(numRedges); },
+    Port *myPort = // my outgoing port to the neighbour
+        std::visit([&nid](auto &x) { return x.getPortWithNeighbourID(nid); },
                    getComponentAt(id));
-    componentVariant &neighbour = getComponentAt(edges[id][0]);
-    ComponentType neighbourType = std::visit(
-        [](const auto &x) -> ComponentType { return x.getType(); }, neighbour);
-    if (!(neighbourType == ComponentType::J0 ||
-          neighbourType == ComponentType::J1)) {
-      throw InCorrectComponentConnection(
-          std::format("Component {} not connected to a Junction\n", id));
-    }
+
     // Setting the causality of the junction connected to me
-    Port *mynPort = getCausalPort(edges[id][0], id);
-    // assign causality for me and my neighbour
+    Port *mynPort = getCausalPort(nid, id);
     assignCausality(myPort, mynPort, out, in);
     if (propagate)
       junctionPropagate(edges[id][0]);
-
-    // assignJunctionCausality(id, edges[id][0], myPort, propagate);
   }
 
   // XXX: Find the matching junction for simplification
@@ -904,7 +890,6 @@ private:
   }
   // Eliminate the junction
   template <ComponentType T> constexpr void elimJunction(Component<T> &x) {
-    std::cout << "Eliminating: " << x << "\n";
     size_t id = x.getID();
     size_t prevId = redges[id][0];
     size_t nextId = edges[id][0];
@@ -917,8 +902,8 @@ private:
     Port *p =
         std::visit([&id](auto &x) { return x.getPortWithNeighbourID(id); },
                    getComponentAt(prevId));
-    assert(p != nullptr);
-    assert(p->getNeighbourID() == id && p->getPortType() == PortType::OUT);
+    assert(p != nullptr && p->getNeighbourID() == id &&
+           p->getPortType() == PortType::OUT);
     p->setNeighbourID(nextId);
 
     // Replace nextid' reverse edges id --> previd
@@ -927,8 +912,8 @@ private:
     *index1 = prevId;
     p = std::visit([&id](auto &x) { return x.getPortWithNeighbourID(id); },
                    getComponentAt(nextId));
-    assert(p != nullptr);
-    assert(p->getNeighbourID() == id && p->getPortType() == PortType::IN);
+    assert(p != nullptr && p->getNeighbourID() == id &&
+           p->getPortType() == PortType::IN);
     p->setNeighbourID(prevId);
 
     // Here we set the deleted to true for this component
@@ -952,29 +937,48 @@ private:
     return (counter == 1);
   }
 
-  void contractJunction(size_t id) {
-    // Get my type
-    ComponentType mType =
-        std::visit([](const auto &x) -> ComponentType { return x.getType(); },
-                   getComponentAt(id));
-    assert(mType == ComponentType::J0 || mType == ComponentType::J1);
+  // This is the shared function to move the inputs and outputs from id
+  // to nid when contracting Junctions
+  void contractJunction1(size_t x, size_t id, size_t nid, PortType f,
+                         PortType s, std::vector<std::vector<size_t>> &edges,
+                         std::vector<std::vector<size_t>> &redges) {
+    auto rindex = std::find(edges[x].begin(), edges[x].end(), id);
+    assert(rindex != edges[x].end());
+    *rindex = nid; // reset it to the next same Junction type node.
+
+    // Now update the port for x to change id --> nid
+    Port *p =
+        std::visit([&id](auto &y) { return y.getPortWithNeighbourID(id); },
+                   getComponentAt(x));
+    assert(p != nullptr && p->getNeighbourID() == id && p->getPortType() == f);
+    p->setNeighbourID(nid);
+
+    // Now add 'x' to nid's redges if it is already not there
+    auto niter = std::find(redges[nid].begin(), redges[nid].end(), x);
+    if (niter == redges[nid].end()) {
+      redges[nid].push_back(x);
+      componentVariant &nComponent = getComponentAt(nid);
+      std::visit([&x, &s](auto &c) { c.addPort(Port(s, x)); }, nComponent);
+    }
+  }
+
+  template <ComponentType T> void contractJunction(Component<T> &x) {
+    size_t id = x.getID();
+    ComponentType mType = x.getType();
     size_t nid = 0;
     // First get the neighbour id with the same type
-    for (auto x = edges[id].begin(); x != edges[id].end(); ++x) {
-      const componentVariant &comp = getComponentAt(*x);
-      bool res = std::visit(
-          [&mType](const auto &y) { return y.getType() == mType; }, comp);
+    for (size_t x : edges[id]) {
+      // const componentVariant &comp = getComponentAt(*x);
+      bool res =
+          std::visit([&mType](const auto &y) { return y.getType() == mType; },
+                     getComponentAt(x));
       if (res) {
-        nid = *x;
+        nid = x;
         break;
       }
     }
+
     // XXX: Need to remove the redge connected from nid to id.
-    std::cout << "contracting nodes: " << id << " " << nid << "\n";
-    std::visit([](const auto &x) { std::cout << x << "\n"; },
-               getComponentAt(id));
-    std::visit([](const auto &x) { std::cout << x << "\n"; },
-               getComponentAt(nid));
     auto redgeptr = std::find(redges[nid].begin(), redges[nid].end(), id);
     assert(redgeptr != redges[nid].end());
     redges[nid].erase(redgeptr); // remove the reverse edge from nid to id
@@ -983,52 +987,14 @@ private:
 
     // Now connect all the inputs from id to nid' input
     for (size_t x : redges[id]) {
-      auto rindex = std::find(edges[x].begin(), edges[x].end(), id);
-      assert(rindex != edges[x].end());
-      *rindex = nid; // reset it to the next same Junction type node.
-
-      // Now update the port for x to have id --> nid
-      Port *p =
-          std::visit([&id](auto &y) { return y.getPortWithNeighbourID(id); },
-                     getComponentAt(x));
-      assert(p != nullptr);
-      assert(p->getNeighbourID() == id && p->getPortType() == PortType::OUT);
-      p->setNeighbourID(nid);
-
-      // Now add 'x' to nid's redges if it is already not there
-      auto niter = std::find(redges[nid].begin(), redges[nid].end(), x);
-      if (niter == redges[nid].end()) {
-        redges[nid].push_back(x);
-        componentVariant &nComponent = getComponentAt(nid);
-        std::visit([&x](auto &c) { c.addPort(Port(PortType::IN, x)); },
-                   nComponent);
-      }
+      contractJunction1(x, id, nid, PortType::OUT, PortType::IN, edges, redges);
     }
 
     // Now re-attach all the outputs from id to nid
     for (size_t x : edges[id]) {
       if (x == nid)
         continue;
-      auto findex = std::find(redges[x].begin(), redges[x].end(), id);
-      assert(findex != redges[x].end());
-      *findex = nid;
-
-      Port *p =
-          std::visit([&id](auto &y) { return y.getPortWithNeighbourID(id); },
-                     getComponentAt(x));
-      assert(p != nullptr);
-      assert(p->getNeighbourID() == id && p->getPortType() == PortType::IN);
-      p->setNeighbourID(nid);
-
-      // Now add a forward edge from nid to x if it is not already there
-      auto niter = std::find(edges[nid].begin(), edges[nid].end(), x);
-      if (niter == edges[nid].end()) {
-        edges[nid].push_back(x);
-        // Add port to nid component
-        componentVariant &nComponent = getComponentAt(nid);
-        std::visit([&x](auto &c) { c.addPort(Port(PortType::OUT, x)); },
-                   nComponent);
-      }
+      contractJunction1(x, id, nid, PortType::IN, PortType::OUT, redges, edges);
     }
     // Set this node to deleted
     std::visit([](auto &x) { x.setDeleted(); }, getComponentAt(id));
@@ -1054,7 +1020,10 @@ private:
   // The vector of all the components in the graph -- it is closed not an open
   // variant
   std::vector<componentVariant> components;
-  // Adjacency list of the graph
+  // Adjacency list of the graph We keep this in addition to IDs in
+  // ports. This is done, because returning a view from variant is not
+  // that easy. Can become possibly expensive, because of converting
+  // view to a vector everytime.
   std::vector<std::vector<size_t>> edges;
   std::vector<std::vector<size_t>> redges; // reverse edges
   // The visited node vector

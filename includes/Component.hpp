@@ -24,7 +24,7 @@ struct Util {
 enum class ComponentType : std::uint8_t { C = 0, L, R, SE, SF, GY, TF, J0, J1 };
 
 // The different types of causality
-enum class Causality : std::uint8_t { Flow = 0, Effort, ACausal };
+enum class Causality : int { Flow = 0, Effort, ACausal };
 
 // The type of port, IN or OUT
 enum class PortType : std::uint8_t { IN = 0, OUT };
@@ -125,9 +125,9 @@ template <ComponentType T> struct Component {
     uint8_t counter = 0;
     for (const Port &x : ports) {
       if (T == ComponentType::J0)
-        counter += x.getInCausality() == Causality::Effort ? 0 : 1;
+        counter += x.getInCausality() == Causality::Effort ? 1 : 0;
       else
-        counter += x.getInCausality() == Causality::Flow ? 0 : 1;
+        counter += x.getInCausality() == Causality::Flow ? 1 : 0;
     }
     if (counter != 1) {
       throw JunctionContraintViolated(
@@ -204,7 +204,7 @@ static std::ostream &operator<<(std::ostream &os, const Causality &c) {
 static std::ostream &operator<<(std::ostream &os, const Port &p) {
   os << "{in causality:" << p.getInCausality();
   os << ",";
-  os << "out causality:" << p.getInCausality() << ", ";
+  os << "out causality:" << p.getOutCausality() << ", ";
   if (p.getPortType() == PortType::IN)
     os << "type : IN ";
   else
