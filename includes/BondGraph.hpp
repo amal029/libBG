@@ -76,8 +76,8 @@ struct BondGraph {
   template <ComponentType X, ComponentType Y>
   void connect(Component<X> &in, Component<Y> &out) {
     // First assign the port for the in and out
-    in.addPort(Port(PortType::OUT));
-    out.addPort(Port(PortType::IN));
+    in.addPort(Port(PortType::OUT, out.getID()));
+    out.addPort(Port(PortType::IN, in.getID()));
     // Then update the adjacency list
     edges[in.getID()].push_back(out.getID());
     redges[out.getID()].push_back(in.getID()); // The reverse edge.
@@ -133,7 +133,7 @@ struct BondGraph {
     resetVisited();
   }
 
-    // Simplify the graph
+  // Simplify the graph
   void simplify() {
     std::vector<size_t> sources;
     getSources(sources);
@@ -198,6 +198,7 @@ struct BondGraph {
   }
 
   void printEdges() { printEdges(edges); }
+  void printReverseEdges() { printEdges(redges); }
 
 private:
   void printEdges(std::vector<std::vector<size_t>> &edges) {
@@ -487,7 +488,7 @@ private:
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
       if (isAssignedCausality(Causality::Effort, parentPortsAssigned)) {
-        std::cerr << std::format("Assigning differential causality to {}",
+        std::cerr << std::format("Assigning differential causality to {}\n",
                                  myId);
         diffCausality();
       } else {
@@ -521,7 +522,7 @@ private:
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
       if (isAssignedCausality(Causality::Flow, parentPortsAssigned)) {
-        std::cerr << std::format("Assigning differential causality to {}",
+        std::cerr << std::format("Assigning differential causality to {}\n",
                                  myId);
         diffCausality();
       } else {
@@ -848,11 +849,13 @@ private:
       throw InCorrectComponentConnection(
           std::format("Junction {} not connected to {}", id, pid));
     }
-    size_t index = res - redges[id].begin();
-    // Now index will be the port that will be used to assign causality
-    Port *myPort =
-        std::visit([&index](auto &x) -> Port * { return x.getPort(index); },
-                   getComponentAt(id));
+    // Get the port with the pid as neighbour
+    Port *myPort = std::visit(
+        [&pid](auto &x) -> Port * {
+          Port *toret = x.getPortWithNeighbourID(pid);
+          return toret;
+        },
+        getComponentAt(id));
     assert(myPort->getPortType() == PortType::IN);
     return myPort;
   }
@@ -901,6 +904,7 @@ private:
   }
   // Eliminate the junction
   template <ComponentType T> constexpr void elimJunction(Component<T> &x) {
+    std::cout << "Eliminating: " << x << "\n";
     size_t id = x.getID();
     size_t prevId = redges[id][0];
     size_t nextId = edges[id][0];
@@ -910,11 +914,22 @@ private:
     assert(index != edges[prevId].end());
     // Now replace the index value with nextid
     *index = nextId;
+    Port *p =
+        std::visit([&id](auto &x) { return x.getPortWithNeighbourID(id); },
+                   getComponentAt(prevId));
+    assert(p != nullptr);
+    assert(p->getNeighbourID() == id && p->getPortType() == PortType::OUT);
+    p->setNeighbourID(nextId);
 
     // Replace nextid' reverse edges id --> previd
     auto index1 = std::find(redges[nextId].begin(), redges[nextId].end(), id);
     assert(index1 != redges[nextId].end());
     *index1 = prevId;
+    p = std::visit([&id](auto &x) { return x.getPortWithNeighbourID(id); },
+                   getComponentAt(nextId));
+    assert(p != nullptr);
+    assert(p->getNeighbourID() == id && p->getPortType() == PortType::IN);
+    p->setNeighbourID(prevId);
 
     // Here we set the deleted to true for this component
     x.setDeleted();
@@ -944,7 +959,7 @@ private:
                    getComponentAt(id));
     assert(mType == ComponentType::J0 || mType == ComponentType::J1);
     size_t nid = 0;
-    // First get the nid with the same type
+    // First get the neighbour id with the same type
     for (auto x = edges[id].begin(); x != edges[id].end(); ++x) {
       const componentVariant &comp = getComponentAt(*x);
       bool res = std::visit(
@@ -954,18 +969,39 @@ private:
         break;
       }
     }
+    // XXX: Need to remove the redge connected from nid to id.
+    std::cout << "contracting nodes: " << id << " " << nid << "\n";
+    std::visit([](const auto &x) { std::cout << x << "\n"; },
+               getComponentAt(id));
+    std::visit([](const auto &x) { std::cout << x << "\n"; },
+               getComponentAt(nid));
+    auto redgeptr = std::find(redges[nid].begin(), redges[nid].end(), id);
+    assert(redgeptr != redges[nid].end());
+    redges[nid].erase(redgeptr); // remove the reverse edge from nid to id
+    // Remove the port from the vector of ports of nid connected to id.
+    std::visit([&id](auto &x) { x.remPort(id); }, getComponentAt(nid));
+
     // Now connect all the inputs from id to nid' input
     for (size_t x : redges[id]) {
       auto rindex = std::find(edges[x].begin(), edges[x].end(), id);
       assert(rindex != edges[x].end());
-      *rindex = nid; // reset it to the next same Junction node.
+      *rindex = nid; // reset it to the next same Junction type node.
+
+      // Now update the port for x to have id --> nid
+      Port *p =
+          std::visit([&id](auto &y) { return y.getPortWithNeighbourID(id); },
+                     getComponentAt(x));
+      assert(p != nullptr);
+      assert(p->getNeighbourID() == id && p->getPortType() == PortType::OUT);
+      p->setNeighbourID(nid);
+
       // Now add 'x' to nid's redges if it is already not there
       auto niter = std::find(redges[nid].begin(), redges[nid].end(), x);
       if (niter == redges[nid].end()) {
         redges[nid].push_back(x);
-        // Add port to nid component
         componentVariant &nComponent = getComponentAt(nid);
-        std::visit([](auto &c) { c.addPort(Port(PortType::IN)); }, nComponent);
+        std::visit([&x](auto &c) { c.addPort(Port(PortType::IN, x)); },
+                   nComponent);
       }
     }
 
@@ -976,13 +1012,22 @@ private:
       auto findex = std::find(redges[x].begin(), redges[x].end(), id);
       assert(findex != redges[x].end());
       *findex = nid;
+
+      Port *p =
+          std::visit([&id](auto &y) { return y.getPortWithNeighbourID(id); },
+                     getComponentAt(x));
+      assert(p != nullptr);
+      assert(p->getNeighbourID() == id && p->getPortType() == PortType::IN);
+      p->setNeighbourID(nid);
+
       // Now add a forward edge from nid to x if it is not already there
       auto niter = std::find(edges[nid].begin(), edges[nid].end(), x);
       if (niter == edges[nid].end()) {
         edges[nid].push_back(x);
         // Add port to nid component
         componentVariant &nComponent = getComponentAt(nid);
-        std::visit([](auto &c) { c.addPort(Port(PortType::OUT)); }, nComponent);
+        std::visit([&x](auto &c) { c.addPort(Port(PortType::OUT, x)); },
+                   nComponent);
       }
     }
     // Set this node to deleted

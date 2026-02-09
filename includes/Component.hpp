@@ -2,6 +2,7 @@
 
 #include "exception.hpp"
 #include "expression.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -30,8 +31,8 @@ enum class PortType : std::uint8_t { IN = 0, OUT };
 
 // The port structure of the component
 struct Port {
-  Port(PortType t)
-      : in(Causality::ACausal), out(Causality::ACausal), mType(t) {}
+  Port(PortType t, size_t ID)
+      : in(Causality::ACausal), out(Causality::ACausal), mType(t), nID(ID) {}
   constexpr bool getAssigned() const { return assigned; }
   void setAssigned() { assigned = true; }
   Port(const Port &) = delete;
@@ -50,12 +51,15 @@ struct Port {
   void setInExpression(expression_t *v) { inx = v; }
   expression_t *getOutExpression() const { return outx; }
   expression_t *getInExpression() const { return inx; }
+  size_t getNeighbourID() const { return nID; }
+  void setNeighbourID(size_t nid) { nID = nid; }
 
 private:
   Causality in;  // The in causality
   Causality out; // The out causality for this port.
   bool assigned = false;
   PortType mType;
+  size_t nID; // neighbour that I am connected to
   // The symbolic values (expressions) each of these ports hold
   expression_t *inx;
   expression_t *outx;
@@ -82,6 +86,8 @@ template <ComponentType T> struct Component {
   constexpr size_t getID() const { return ID; }
   constexpr ComponentType getType() const { return myT; }
   constexpr size_t portSize() const { return ports.size(); }
+  constexpr std::vector<Port>::iterator portBegin() { return ports.begin(); }
+  constexpr std::vector<Port>::iterator portEnd() { return ports.end(); }
   constexpr const Port *getPort(size_t i) const {
     assert(i < ports.size());
     return &ports[i];
@@ -90,8 +96,26 @@ template <ComponentType T> struct Component {
     assert(i < ports.size());
     return &ports[i];
   }
+  constexpr Port *getPortWithNeighbourID(size_t nid) {
+    Port *toret = nullptr;
+    for (size_t i = 0; i < ports.size(); ++i) {
+      if (ports[i].getNeighbourID() == nid) {
+        toret = &ports[i];
+	break;
+      }
+    }
+    return toret;
+  }
   constexpr void setPort(size_t i, Port &&p) { ports[i] = std::move(p); }
   constexpr void addPort(Port &&p) { ports.push_back(std::move(p)); }
+  constexpr void remPort(size_t nID) {
+    auto torem =
+        std::find_if(ports.begin(), ports.end(), [&nID](const Port &p) {
+          return p.getNeighbourID() == nID;
+        });
+    assert(torem != ports.end());
+    ports.erase(torem);
+  }
   // Deleted means deleted from the bond graph
   constexpr void setDeleted() { deleted = true; }
   constexpr bool getDeleted() const { return deleted; }
@@ -113,7 +137,6 @@ template <ComponentType T> struct Component {
   // Get Pref Causality
   void setInternalExpression(expression_t *v) { internal = v; }
   expression_t *getInternalExpression() const { return internal; }
-  
 
 private:
   ComponentType myT;
@@ -179,9 +202,15 @@ static std::ostream &operator<<(std::ostream &os, const Causality &c) {
 
 // Printing the port
 static std::ostream &operator<<(std::ostream &os, const Port &p) {
-  os << "{in:" << p.getInCausality();
+  os << "{in causality:" << p.getInCausality();
   os << ",";
-  os << "out:" << p.getInCausality() << "}";
+  os << "out causality:" << p.getInCausality() << ", ";
+  if (p.getPortType() == PortType::IN)
+    os << "type : IN ";
+  else
+    os << "type : OUT ";
+  os << "neighbour ID: " << p.getNeighbourID();
+  os << "}";
   return os;
 }
 
