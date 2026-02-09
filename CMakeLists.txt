@@ -14,18 +14,44 @@ find_package(PkgConfig REQUIRED)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Add ex1.cpp file of the project root directory as a source file
-set(SOURCE_FILES ../src/ex1.cpp)
+# set(SOURCE_FILES ../test/test1.cpp)
 
+#------------------------Test executables from here ------------------
 # Add executable target with source files listed in SOURCE_FILES variable
-add_executable(test ${SOURCE_FILES})
+add_executable(test1 ../test/test1.cpp)
 
 # The include directory
-# target_include_directories(test PRIVATE includes ${GINAC_INCLUDE_DIRS})
-target_include_directories(test PRIVATE includes)
+# target_include_directories(test1 PRIVATE includes ${GINAC_INCLUDE_DIRS})
+target_include_directories(test1 PRIVATE includes)
 
-target_compile_options(test PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
+target_compile_options(test1 PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
 			    -Wno-unused-parameter -Wno-unused-function)
-# target_link_directories(test PRIVATE ${GINAC_LIBRARY_DIRS})
-# target_link_libraries(test PRIVATE ${GINAC_LIBRARIES})
+# target_link_directories(test1 PRIVATE ${GINAC_LIBRARY_DIRS})
+# target_link_libraries(test1 PRIVATE ${GINAC_LIBRARIES})
 
+#--------------------------Test 2--------------------------------------
+# The second test
+# Add executable target with source files listed in SOURCE_FILES variable
+add_executable(test2 ../test/test2.cpp)
+
+# The include directory
+target_include_directories(test2 PRIVATE includes)
+
+target_compile_options(test2 PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
+			    -Wno-unused-parameter -Wno-unused-function)
+# target_link_directories(test2 PRIVATE ${GINAC_LIBRARY_DIRS})
+# target_link_libraries(test2 PRIVATE ${GINAC_LIBRARIES})
+
+#----------------------- Example 1---------------------
+# Add executable target with source files listed in SOURCE_FILES variable
+add_executable(ex1 ../src/ex1.cpp)
+
+# The include directory
+# target_include_directories(ex1 PRIVATE includes ${GINAC_INCLUDE_DIRS})
+target_include_directories(ex1 PRIVATE includes)
+
+target_compile_options(ex1 PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
+			    -Wno-unused-parameter -Wno-unused-function)
+# target_link_directories(ex1 PRIVATE ${GINAC_LIBRARY_DIRS})
+# target_link_libraries(ex1 PRIVATE ${GINAC_LIBRARIES})
 

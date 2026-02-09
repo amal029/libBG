@@ -22,9 +22,6 @@ struct Util {
 // The type of components that are allowed in the Bond Graph
 enum class ComponentType : std::uint8_t { C = 0, L, R, SE, SF, GY, TF, J0, J1 };
 
-// The preferred causality
-enum class PrefCausality : std::uint8_t { I = 0, D, N };
-
 // The different types of causality
 enum class Causality : std::uint8_t { Flow = 0, Effort, ACausal };
 
@@ -33,11 +30,8 @@ enum class PortType : std::uint8_t { IN = 0, OUT };
 
 // The port structure of the component
 struct Port {
-  Port(PortType t) : in(Causality::ACausal), out(Causality::ACausal), mType(t) {
-    // size_t ID = Util::getID();
-    // inx = GiNaC::symbol{"in" + std::to_string(ID)};
-    // outx = GiNaC::symbol{"out" + std::to_string(ID)};
-  }
+  Port(PortType t)
+      : in(Causality::ACausal), out(Causality::ACausal), mType(t) {}
   constexpr bool getAssigned() const { return assigned; }
   void setAssigned() { assigned = true; }
   Port(const Port &) = delete;
@@ -89,15 +83,11 @@ template <ComponentType T> struct Component {
   constexpr ComponentType getType() const { return myT; }
   constexpr size_t portSize() const { return ports.size(); }
   constexpr const Port *getPort(size_t i) const {
-    if (i > ports.size()) {
-      throw PortIndexOutofBounds("");
-    }
+    assert(i < ports.size());
     return &ports[i];
   }
   constexpr Port *getPort(size_t i) {
-    if (i > ports.size()) {
-      throw PortIndexOutofBounds("");
-    }
+    assert(i < ports.size());
     return &ports[i];
   }
   constexpr void setPort(size_t i, Port &&p) { ports[i] = std::move(p); }
@@ -199,7 +189,8 @@ static std::ostream &operator<<(std::ostream &os, const Port &p) {
 template <ComponentType T>
 static std::ostream &operator<<(std::ostream &os, const Component<T> &c) {
   if (c.getDeleted())
-    throw DeletedException("Accessed a deleted node!");
+    throw DeletedException(
+        std::format("Accessed a deleted node {}!", c.getID()));
   os << "{";
   os << "Name:" << c.getName() << ", ";
   os << "Type:" << c.getType() << ", ";

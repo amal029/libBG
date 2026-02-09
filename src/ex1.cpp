@@ -1,17 +1,17 @@
 #include "BondGraph.hpp"
 #include "Component.hpp"
-#include "expression.hpp"
+// #include "expression.hpp"
 #include <iostream>
 
 int main() {
 
   // Example of an expression
-  expressionAst ast;
-  expression_t *t = ast.append(make_expr(Symbol("x")));
-  expression_t *t1 = ast.append(make_expr(Number(10)));
-  t = ast.append(make_expr(Expression<EOP::MUL>(t, t1)));
-  ast.printExpression(std::cout, ast[ast.size() - 1]);
-  std::cout << "\n";
+  // expressionAst ast;
+  // expression_t *t = ast.append(make_expr(Symbol("x")));
+  // expression_t *t1 = ast.append(make_expr(Number(10)));
+  // t = ast.append(make_expr(Expression<EOP::MUL>(t, t1)));
+  // ast.printExpression(std::cout, ast[ast.size() - 1]);
+  // std::cout << "\n";
 
   // Declare a Capacitor
   Component<ComponentType::C> c{"c"};    // capacitor

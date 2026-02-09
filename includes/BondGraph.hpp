@@ -64,7 +64,10 @@ struct BondGraph {
       if (found)
         break;
     }
-    assert(found);
+    if (!found) {
+      throw NotFound(
+          std::format("Component named {} not found!", name));
+    }
     return std::get<Component<T>>(components[i]);
   }
 
@@ -114,49 +117,32 @@ struct BondGraph {
   template <typename Callable, bool PRE = true>
   void dfs(const std::vector<size_t> &sources, Callable &f) {
     for (size_t i : sources) {
-      DFS<Callable, PRE>(i, f);
+      DFS(i, f);
     }
     // Then go through all the nodes that have not been visited yet --
     // possible.
-    bool res =
-        std::all_of(visited.begin(), visited.end(), [](bool x) { return x; });
-    if (!res) {
-      size_t i = 0;
-      for (bool x : visited) {
-        if (!x) {
-          DFS<Callable, PRE>(i, f); // Visit if not visited
-        }
-        ++i;
+    size_t i = 0;
+    for (bool x : visited) {
+      bool deleted = std::visit([](const auto &x) { return x.getDeleted(); },
+                                components[i]);
+      if (!x && !deleted) {
+        DFS<Callable, PRE>(i, f); // Visit if not visited
       }
+      ++i;
     }
+    resetVisited();
   }
 
-  // Simplify the graph
+    // Simplify the graph
   void simplify() {
-    std::vector<size_t> done;
-    done.reserve(components.size()); // Just to make it faster
-    bool madeChange;
-    while (true) {
-      madeChange = false;
-      for (size_t i = 0; i < components.size(); ++i) {
-        size_t id =
-            std::visit([](const auto &x) { return x.getID(); }, components[i]);
-        bool res = std::find(done.begin(), done.end(), id) != done.end();
-        if (canElimJunction(id) && res) {
-          elimJunction(id);
-          madeChange = true;
-        }
-        if (canContractJunction(id) && res) {
-          contractJunction(id);
-          madeChange = true;
-        }
-        // Add id to done
-        done.push_back(id);
-      }
-      // If no change was made in the graph then just break out.
-      if (!madeChange)
-        break;
-    }
+    std::vector<size_t> sources;
+    getSources(sources);
+    // Eliminate junctions
+    auto visitorElim = [&](auto &x) { simplify1(x); };
+    dfs(sources, visitorElim);
+    // Contract junctions (step 2)
+    auto visitorContract = [&](auto &x) { simplify2(x); };
+    dfs(sources, visitorContract);
   }
 
   void assignCausality() {
@@ -204,7 +190,47 @@ struct BondGraph {
     dfs(sources, visitor);
   }
 
+  // Reset the visited flag
+  void resetVisited() {
+    for (size_t i = 0; i < visited.size(); ++i) {
+      visited[i] = false;
+    }
+  }
+
+  void printEdges() { printEdges(edges); }
+
 private:
+  void printEdges(std::vector<std::vector<size_t>> &edges) {
+    std::cout << "[";
+    for (size_t i = 0; i < edges.size(); ++i) {
+      bool isDeleted = std::visit([](const auto &x) { return x.getDeleted(); },
+                                  getComponentAt(i));
+      if (isDeleted)
+        continue;
+      std::cout << i << "[";
+      for (size_t j = 0; j < edges[i].size(); ++j) {
+        std::cout << edges[i][j] << " ";
+      }
+      std::cout << "]\n";
+    }
+    std::cout << "]";
+  }
+
+  template <ComponentType T> void simplify1(Component<T> &x) {
+    if ((T == ComponentType::J0 || T == ComponentType::J1) &&
+        canElimJunction(x)) {
+      elimJunction(x);
+    }
+  }
+
+  template <ComponentType T> void simplify2(Component<T> &x) {
+    size_t id = x.getID();
+    if ((T == ComponentType::J0 || T == ComponentType::J1) &&
+        canContractJunction(x)) {
+      contractJunction(id);
+    }
+  }
+
   template <ComponentType T>
   constexpr void OutputsEqualInputs(expressionAst &space, Component<T> &x) {
     size_t myID = x.getID();
@@ -353,7 +379,7 @@ private:
       }
     }
     expression_t *res =
-      // space[0] always holds a zero number
+        // space[0] always holds a zero number
         std::accumulate(nv.begin(), nv.end(), space[0],
                         [&space](expression_t *init, expression_t *value) {
                           expression_t *r = space.append(
@@ -863,24 +889,19 @@ private:
   }
 
   // XXX: Find the matching junction for simplification
-  constexpr bool canElimJunction(size_t id) {
+  template <ComponentType T> constexpr bool canElimJunction(Component<T> &x) {
     bool toret = false;
-    // Check if this component is a junction
-    auto &component = getComponentAt(id);
-    if (std::holds_alternative<Component<ComponentType::J0>>(component) ||
-        std::holds_alternative<Component<ComponentType::J1>>(component)) {
-      // Check the port size
-      size_t numPorts = std::visit(
-          [](const auto &x) -> size_t { return x.portSize(); }, component);
-      if (numPorts == 2) {
-        // Now check that one is an input and one is an output
-        toret = (edges[id].size() == 1) && (redges[id].size() == 1);
-      }
-    }
+    size_t numPorts = x.portSize();
+    if (numPorts == 2)
+      toret = (x.getPort(0)->getPortType() == PortType::IN &&
+               x.getPort(1)->getPortType() == PortType::OUT) ||
+              (x.getPort(0)->getPortType() == PortType::OUT &&
+               x.getPort(1)->getPortType() == PortType::IN);
     return toret;
   }
   // Eliminate the junction
-  constexpr void elimJunction(size_t id) {
+  template <ComponentType T> constexpr void elimJunction(Component<T> &x) {
+    size_t id = x.getID();
     size_t prevId = redges[id][0];
     size_t nextId = edges[id][0];
 
@@ -896,32 +917,24 @@ private:
     *index1 = prevId;
 
     // Here we set the deleted to true for this component
-    std::visit([](auto &x) { x.setDeleted(); }, getComponentAt(id));
+    x.setDeleted();
+    // std::visit([](auto &x) { x.setDeleted(); }, getComponentAt(id));
   }
 
   // Contracting junctions
-  constexpr bool canContractJunction(size_t id) {
-    bool toret = false;
+  template <ComponentType T>
+  constexpr bool canContractJunction(Component<T> &component) {
+    size_t id = component.getID();
     // XXX: A junction with same type connected to another junction of
     // the same type.
-
-    auto &component = getComponentAt(id);
-    if (std::holds_alternative<Component<ComponentType::J0>>(component) ||
-        std::holds_alternative<Component<ComponentType::J1>>(component)) {
-      // Is this junction connected to another junction of the same type
-      ComponentType idType =
-          std::visit([](const auto &x) -> ComponentType { return x.getType(); },
-                     component);
-      size_t counter = 0;
-      for (size_t nid : edges[id]) {
-        ComponentType nType = std::visit(
-            [&](const auto &y) -> ComponentType { return y.getType(); },
-            getComponentAt(nid));
-        counter += (nType == idType) ? 1 : 0;
-      }
-      toret = counter == 1;
+    size_t counter = 0;
+    for (size_t nid : edges[id]) {
+      ComponentType nType = std::visit(
+          [&](const auto &y) -> ComponentType { return y.getType(); },
+          getComponentAt(nid));
+      counter += (nType == T) ? 1 : 0;
     }
-    return toret;
+    return (counter == 1);
   }
 
   void contractJunction(size_t id) {
@@ -1009,6 +1022,6 @@ static std::ostream &operator<<(std::ostream &os, BondGraph &g) {
   g.getSources(sources);
   // Then visit the graph and apply the print function to everything
   auto visitor = [&os](auto &x) { os << x << "\n"; };
-  g.dfs<decltype(visitor), true>(sources, visitor);
+  g.dfs(sources, visitor);
   return os;
 }

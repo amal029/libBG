@@ -72,3 +72,12 @@ public:
   explicit NotYetImplemented(const std::string &msg) : message(msg) {}
   const char *what() const noexcept override { return message.c_str(); }
 };
+
+class NotFound : public std::exception {
+private:
+  std::string message;
+
+public:
+  explicit NotFound(const std::string &msg) : message(msg) {}
+  const char *what() const noexcept override { return message.c_str(); }
+};
