@@ -352,10 +352,9 @@ private:
         nv.push_back(oport->getInExpression());
       }
     }
-    expression_t *init = space.append(make_expr(Number(0)));
-
     expression_t *res =
-        std::accumulate(nv.begin(), nv.end(), init,
+      // space[0] always holds a zero number
+        std::accumulate(nv.begin(), nv.end(), space[0],
                         [&space](expression_t *init, expression_t *value) {
                           expression_t *r = space.append(
                               make_expr(Expression<EOP::ADD>(init, value)));

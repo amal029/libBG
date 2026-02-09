@@ -27,6 +27,10 @@ using expression_t = std::variant<Symbol, Number, Expression<EOP::ADD>,
 
 template <EOP op> struct Expression {
   Expression(expression_t *l, expression_t *r) : left(l), right(r) {}
+  Expression(const Expression &) = delete;
+  Expression &operator=(const Expression &) = delete;
+  Expression &operator=(Expression &&) = default;
+  Expression(Expression &&) = default;
   expression_t *left;
   expression_t *right;
 };
@@ -62,15 +66,13 @@ static std::ostream &operator<<(std::ostream &os, const expression_t &in) {
 }
 
 struct expressionAst {
-  expressionAst() {}
+  expressionAst() { arena.push_back(make_expr(Number(0))); }
   [[nodiscard]]
   expression_t *append(std::unique_ptr<expression_t> &&x) {
     arena.emplace_back(std::move(x));
     return arena[arena.size() - 1].get();
   }
-  void printExpression(std::ostream &os, const expression_t *p) {
-    os << *p;
-  }
+  void printExpression(std::ostream &os, const expression_t *p) { os << *p; }
   expression_t *operator[](size_t index) { return arena[index].get(); }
   size_t size() const { return arena.size(); }
 

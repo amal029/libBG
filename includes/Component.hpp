@@ -105,7 +105,7 @@ template <ComponentType T> struct Component {
   // Deleted means deleted from the bond graph
   constexpr void setDeleted() { deleted = true; }
   constexpr bool getDeleted() const { return deleted; }
-  constexpr expression_t getValue() const { return value; }
+  constexpr expression_t &&getValue() { return std::move(value); }
 
   constexpr void satisfyConstraints() const {
     uint8_t counter = 0;
