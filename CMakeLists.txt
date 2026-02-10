@@ -55,3 +55,13 @@ target_compile_options(ex1 PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
 # target_link_directories(ex1 PRIVATE ${GINAC_LIBRARY_DIRS})
 # target_link_libraries(ex1 PRIVATE ${GINAC_LIBRARIES})
 
+# ------------Expression test-------------------------
+add_executable(testexp ../test/testexp.cpp)
+
+# The include directory
+# target_include_directories(testexp PRIVATE includes ${GINAC_INCLUDE_DIRS})
+target_include_directories(testexp PRIVATE includes)
+
+target_compile_options(testexp PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
+			    -Wno-unused-parameter -Wno-unused-function)
+

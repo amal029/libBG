@@ -11,6 +11,7 @@
 #include <iostream>
 #include <ostream>
 #include <string>
+#include <variant>
 #include <vector>
 
 struct Util {
@@ -61,15 +62,15 @@ private:
   PortType mType;
   size_t nID; // neighbour that I am connected to
   // The symbolic values (expressions) each of these ports hold
-  expression_t *inx;
-  expression_t *outx;
+  expression_t *inx = nullptr;
+  expression_t *outx = nullptr;
 };
 
 // The common Component class
 template <ComponentType T> struct Component {
   constexpr Component() {} // This is for Bond Graph insertion
   constexpr Component(const char *n) : myT(T), name(n), ID(Util::getID()) {
-    value = Symbol{(name + std::to_string(ID)).c_str()};
+    value = (name + std::string("_") + std::to_string(ID));
   }
   constexpr Component(const Component &) = delete; // Copy constructor is
                                                    // deleted
@@ -101,7 +102,7 @@ template <ComponentType T> struct Component {
     for (size_t i = 0; i < ports.size(); ++i) {
       if (ports[i].getNeighbourID() == nid) {
         toret = &ports[i];
-	break;
+        break;
       }
     }
     return toret;
@@ -119,7 +120,14 @@ template <ComponentType T> struct Component {
   // Deleted means deleted from the bond graph
   constexpr void setDeleted() { deleted = true; }
   constexpr bool getDeleted() const { return deleted; }
-  constexpr expression_t &&getValue() { return std::move(value); }
+  constexpr const std::string &getValue() const {
+    // std::cout << value << "\n";
+    return value;
+  }
+  constexpr std::string &&getValue() {
+    // std::cout << value << "\n";
+    return std::move(value);
+  }
 
   constexpr void satisfyConstraints() const {
     uint8_t counter = 0;
@@ -135,8 +143,22 @@ template <ComponentType T> struct Component {
     }
   }
   // Get Pref Causality
-  void setInternalExpression(expression_t *v) { internal = v; }
-  expression_t *getInternalExpression() const { return internal; }
+  // void setInternalExpression(expression_t *v) {
+  //   if constexpr (T == ComponentType::C || T == ComponentType::L)
+  //     internal = v;
+  //   else {
+  //     std::cout << "No internal for ID: " << ID;
+  //     static_assert(false);
+  //   }
+  // }
+  // expression_t *getInternalExpression() const {
+  //   if constexpr (T == ComponentType::C || T == ComponentType::L)
+  //     return internal;
+  //   else {
+  //     std::cout << "No internal for ID: " << ID;
+  //     static_assert(false);
+  //   }
+  // }
 
 private:
   ComponentType myT;
@@ -146,8 +168,8 @@ private:
   bool deleted = false;    // Has this been deleted from the graph
                            // during simplification.
   // The symbolic value of this component
-  expression_t value;
-  expression_t *internal; // This is only for C/R/L
+  std::string value;
+  // expression_t *internal; // This is only for C/R/L
 };
 
 // Printing the enum
@@ -224,6 +246,7 @@ static std::ostream &operator<<(std::ostream &os, const Component<T> &c) {
   os << "Name:" << c.getName() << ", ";
   os << "Type:" << c.getType() << ", ";
   os << "ID:" << c.getID() << ", ";
+  os << "value: " << c.getValue() << ", ";
   os << "Ports:{";
   for (size_t i = 0; i < c.portSize(); ++i) {
     os << *c.getPort(i);
