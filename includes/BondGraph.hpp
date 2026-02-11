@@ -8,10 +8,8 @@
 #include <cstring>
 #include <format>
 #include <iostream>
-#include <numeric>
 #include <ostream>
 #include <stdexcept>
-#include <string>
 #include <variant>
 #include <vector>
 
@@ -153,7 +151,6 @@ struct BondGraph {
     auto visitorContract = [&](auto &x) { simplify2(x); };
     dfs(sources, visitorContract);
   }
-
   void assignCausality() {
     // First get all the sources
     std::vector<size_t> sources;
@@ -183,6 +180,10 @@ struct BondGraph {
     for (const auto &s : sources) {
       junctionPropagate(edges[s][0]);
     }
+
+    // Here do a dfs of the graph and for each port give it a name
+    auto visitor = [](auto &x) { x.assignPortName(); };
+    dfs(sources, visitor);
   }
 
   // Print the state space variables for debuggning for now
