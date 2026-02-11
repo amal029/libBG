@@ -345,19 +345,23 @@ private:
       // inport->setOutExpression(res);
       // Now do the flow
       // outputExpression of outport = inExpression of inport * value
-      expression_t *res1 = space.append(
-          make_expr(Expression<EOP::MUL>(inport->getInExpression(), value)));
-      outport->setOutExpression(res1);
+      res1 = space.append(Symbol{inport->getInCausalName()});
+      res1 = space.append(Expression<EOP::MUL>(res1, value_index));
+      res = space.append(Symbol{outport->getOutCausalName()});
+      size_t _ = space.append(Expression<EOP::EQ>{res, res1});
     } else {
       // This is the flow out from input..same as above, except div
-      expression_t *res = space.append(
-          make_expr(Expression<EOP::DIV>(outport->getInExpression(), value)));
-      inport->setOutExpression(res);
+      size_t res = space.append(Symbol{outport->getInCausalName()});
+      size_t res1 = space.append(Expression<EOP::DIV>(res, value_index));
+      size_t rr = space.append(Symbol{inport->getOutCausalName()});
+      res = space.append(Expression<EOP::EQ>{rr, res1});
       // Now do the flow
-      // outputExpression of outport = inExpression of inport * value
-      expression_t *res1 = space.append(
-          make_expr(Expression<EOP::DIV>(inport->getInExpression(), value)));
-      outport->setOutExpression(res1);
+      // outputExpression of outport = inExpression of inport / value
+      res = space.append(Symbol{inport->getInCausalName()});
+      res1 = space.append(Expression<EOP::DIV>(res, value_index));
+      rr = space.append(Symbol{outport->getOutCausalName()});
+      res = space.append(Expression<EOP::EQ>{rr, res1});
+      // outport->setOutExpression(res1);
     }
   }
 
@@ -377,21 +381,21 @@ private:
     OutputsEqualInputs(space, x);
   }
   
-  // constexpr void addToSpace(expressionAst &space,
-  //                           Component<ComponentType::GY> &x) {
-  //   assert(x.portSize() == 2);
-  //   Port *inport = x.getPort(0);
-  //   assert(inport->getPortType() == PortType::IN);
-  //   Port *outport = x.getPort(1);
-  //   assert(outport->getPortType() == PortType::OUT);
-  //   assert((inport->getOutCausality() == Causality::Effort &&
-  //           outport->getOutCausality() == Causality::Effort) ||
-  //          (inport->getOutCausality() == Causality::Flow &&
-  //           outport->getOutCausality() == Causality::Flow));
-  //   expression_t *value = space.append(make_expr(x.getValue()));
-  //   addToSpaceTFGY(space, inport, outport, value);
-  //   OutputsEqualInputs(space, x);
-  // }
+  constexpr void addToSpace(expressionAst &space,
+                            Component<ComponentType::GY> &x) {
+    assert(x.portSize() == 2);
+    Port *inport = x.getPort(0);
+    assert(inport->getPortType() == PortType::IN);
+    Port *outport = x.getPort(1);
+    assert(outport->getPortType() == PortType::OUT);
+    assert((inport->getOutCausality() == Causality::Effort &&
+            outport->getOutCausality() == Causality::Effort) ||
+           (inport->getOutCausality() == Causality::Flow &&
+            outport->getOutCausality() == Causality::Flow));
+    size_t value_index = space.append(Symbol{x.getValue()});
+    addToSpaceTFGY(space, inport, outport, value_index);
+    OutputsEqualInputs(space, x);
+  }
   // constexpr void addToSpaceJ0J1(expressionAst &space, Port *mainPort,
   //                               std::vector<Port *> others) {
   //   for (Port *pp : others) {
