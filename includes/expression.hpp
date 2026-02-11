@@ -178,14 +178,13 @@ struct expressionAst {
   }
 
   // Get the Equality expressions
-  std::vector<Expression<EOP::EQ> *> getEQ() const {
+  std::vector<Expression<EOP::EQ> *> getEQ() {
     std::vector<Expression<EOP::EQ> *> toret;
     toret.reserve(arena.size());
     for (size_t i = 0; i < arena.size(); ++i) {
-      T type = std::visit([](auto &x) { return x.getT(); }, arena[i]);
-      if (type == T::EQ) {
-        // reinterpret cast
-        toret.push_back((Expression<EOP::EQ> *)(&arena[i]));
+      Expression<EOP::EQ> *pp = std::get_if<Expression<EOP::EQ>>(&arena[i]);
+      if (pp != nullptr) {
+        toret.push_back(pp);
       }
     }
     return toret;
@@ -214,11 +213,8 @@ struct expressionAst {
       size_t counter = 0;
       for (Expression<EOP::EQ> *x : eqs) {
         assert(x != nullptr);
-        T eqlt = std::visit([](const auto &y) { return y.getT(); },
-                            arena[x->getLeft()]);
-        assert(eqlt == T::SYM);
-        Symbol *eqls = (Symbol *)(&arena[x->getLeft()]);
-        if (torepsym->getName() == eqls->getName()) {
+	Symbol *eqls = std::get_if<Symbol>(&arena[x->getLeft()]);
+        if (eqls != nullptr && torepsym->getName() == eqls->getName()) {
           if (visited[counter]) {
             // FIXME: Make the error report better
             throw std::runtime_error(
