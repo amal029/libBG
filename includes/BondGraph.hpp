@@ -8,6 +8,7 @@
 #include <cstring>
 #include <format>
 #include <iostream>
+#include <numeric>
 #include <ostream>
 #include <stdexcept>
 #include <variant>
@@ -380,7 +381,7 @@ private:
     addToSpaceTFGY(space, inport, outport, value_index);
     OutputsEqualInputs(space, x);
   }
-  
+
   constexpr void addToSpace(expressionAst &space,
                             Component<ComponentType::GY> &x) {
     assert(x.portSize() == 2);
@@ -396,101 +397,103 @@ private:
     addToSpaceTFGY(space, inport, outport, value_index);
     OutputsEqualInputs(space, x);
   }
-  // constexpr void addToSpaceJ0J1(expressionAst &space, Port *mainPort,
-  //                               std::vector<Port *> others) {
-  //   for (Port *pp : others) {
-  //     pp->setOutExpression(mainPort->getInExpression());
-  //   }
-  //   // Now handle the sum of flows
-  //   std::vector<PortType> otherPortTypes;
-  //   otherPortTypes.reserve(others.size());
-  //   for (Port *pp : others) {
-  //     otherPortTypes.push_back(pp->getPortType());
-  //   }
-  //   std::vector<expression_t *> nv;
-  //   nv.reserve(others.size());
-  //   // Now if the port type is output then transform its inputExpression
-  //   for (size_t i = 0; i < others.size(); ++i) {
-  //     Port *oport = others[i];
-  //     PortType oport_t = otherPortTypes[i];
-  //     if (oport_t == PortType::OUT) {
-  //       expression_t *ee = space.append(make_expr(Number(-1)));
-  //       expression_t *ee1 = space.append(
-  //           make_expr(Expression<EOP::MUL>(ee, oport->getInExpression())));
-  //       nv.push_back(ee1);
-  //     } else {
-  //       nv.push_back(oport->getInExpression());
-  //     }
-  //   }
-  //   expression_t *res =
-  //       // space[0] always holds a zero number
-  //       std::accumulate(nv.begin(), nv.end(), space[0],
-  //                       [&space](expression_t *init, expression_t *value) {
-  //                         expression_t *r = space.append(
-  //                             make_expr(Expression<EOP::ADD>(init, value)));
-  //                         return r;
-  //                       });
-  //   mainPort->setOutExpression(res);
-  // }
-  // constexpr void addToSpace(expressionAst &space,
-  //                           Component<ComponentType::J0> &x) {
-  //   // First get the main port with out causality of Effort
-  //   Port *mainPort;
-  //   std::vector<Port *> others;
-  //   for (size_t i = 0; i < x.portSize(); ++i) {
-  //     Port *pp = x.getPort(i);
-  //     if (pp->getInCausality() == Causality::Effort) {
-  //       mainPort = pp;
-  //     } else {
-  //       others.push_back(pp);
-  //     }
-  //   }
-  //   assert(others.size() >=
-  //          2); // There should be at least 2 non main type ports
-  //   assert(mainPort->getOutCausality() == Causality::Flow);
-  //   addToSpaceJ0J1(space, mainPort, others);
-  //   // Now set the equality constraints for all the other outputs
-  //   OutputsEqualInputs(space, x);
-  // }
-  // constexpr void addToSpace(expressionAst &space,
-  //                           Component<ComponentType::J1> &x) {
-  //   // First get the main port with out causality of Flow
-  //   Port *mainPort;
-  //   std::vector<Port *> others;
-  //   for (size_t i = 0; i < x.portSize(); ++i) {
-  //     Port *pp = x.getPort(i);
-  //     if (pp->getInCausality() == Causality::Flow) {
-  //       mainPort = pp;
-  //     } else {
-  //       others.push_back(pp);
-  //     }
-  //   }
-  //   std::cout << x << "\n";
-  //   std::cout << *mainPort << "\n";
-  //   std::cout << *mainPort->getInExpression() << "\n";
-  //   assert(others.size() >= 2);
-  //   assert(mainPort->getOutCausality() == Causality::Effort);
-  //   addToSpaceJ0J1(space, mainPort, others);
-  //   // Now set the equality constraints for all the other outputs
-  //   OutputsEqualInputs(space, x);
-  // }
-  // constexpr void addToSpace(expressionAst &space,
-  //                           Component<ComponentType::R> &x) const {
-  //   assert(x.portSize() == 1);
-  //   Port *inport = x.getPort(0);
-  //   assert(inport->getPortType() == PortType::IN);
-  //   bool isIntegral = inport->getOutCausality() == Causality::Effort;
-  //   expression_t *value = space.append(make_expr(x.getValue()));
-  //   expression_t *out;
-  //   if (isIntegral) {
-  //     out = space.append(
-  //         make_expr(Expression<EOP::MUL>(inport->getInExpression(), value)));
-  //   } else {
-  //     out = space.append(
-  //         make_expr(Expression<EOP::DIV>(inport->getInExpression(), value)));
-  //   }
-  //   inport->setOutExpression(out);
-  // }
+  constexpr void addToSpaceJ0J1(expressionAst &space, Port *mainPort,
+                                std::vector<Port *> others) {
+    size_t main_index = space.append(Symbol{mainPort->getInCausalName()});
+    for (Port *pp : others) {
+      size_t pp_out_index = space.append(Symbol{pp->getOutCausalName()});
+      size_t _ = space.append(Expression<EOP::EQ>{pp_out_index, main_index});
+      // pp->setOutExpression(mainPort->getInExpression());
+    }
+    // Now handle the sum of flows/efforts
+    std::vector<PortType> otherPortTypes;
+    otherPortTypes.reserve(others.size());
+    for (Port *pp : others) {
+      otherPortTypes.push_back(pp->getPortType());
+    }
+    std::vector<size_t> nv;
+    nv.reserve(others.size());
+    // Now if the port type is output then transform its inputExpression
+    for (size_t i = 0; i < others.size(); ++i) {
+      Port *oport = others[i];
+      PortType oport_t = otherPortTypes[i];
+      if (oport_t == PortType::OUT) {
+        size_t ee = space.append(Number(-1));
+	size_t ee2 = space.append(Symbol{oport->getInCausalName()});
+        size_t ee1 = space.append(Expression<EOP::MUL>(ee, ee2));
+        nv.push_back(ee1);
+      } else {
+	size_t ii = space.append(Symbol{oport->getInCausalName()});
+        nv.push_back(ii);
+      }
+    }
+    size_t res =
+        // space[0] always holds the zero number
+        std::accumulate(
+            nv.begin(), nv.end(), 0, [&](size_t init, size_t value) {
+              size_t r = space.append(Expression<EOP::ADD>(init, value));
+              return r;
+            });
+    size_t rres = space.append(Symbol{mainPort->getOutCausalName()});
+    size_t _ = space.append(Expression<EOP::EQ>{rres, res});
+    // mainPort->setOutExpression(res);
+  }
+  constexpr void addToSpace(expressionAst &space,
+                            Component<ComponentType::J0> &x) {
+    // First get the main port with out causality of Effort
+    Port *mainPort;
+    std::vector<Port *> others;
+    for (size_t i = 0; i < x.portSize(); ++i) {
+      Port *pp = x.getPort(i);
+      if (pp->getInCausality() == Causality::Effort) {
+        mainPort = pp;
+      } else {
+        others.push_back(pp);
+      }
+    }
+    assert(others.size() >= 2);
+    assert(mainPort->getOutCausality() == Causality::Flow);
+    addToSpaceJ0J1(space, mainPort, others);
+    // Now set the equality constraints for all the other outputs
+    OutputsEqualInputs(space, x);
+  }
+  constexpr void addToSpace(expressionAst &space,
+                            Component<ComponentType::J1> &x) {
+    // First get the main port with out causality of Flow
+    Port *mainPort;
+    std::vector<Port *> others;
+    for (size_t i = 0; i < x.portSize(); ++i) {
+      Port *pp = x.getPort(i);
+      if (pp->getInCausality() == Causality::Flow) {
+        mainPort = pp;
+      } else {
+        others.push_back(pp);
+      }
+    }
+    assert(others.size() >= 2);
+    assert(mainPort->getOutCausality() == Causality::Effort);
+    addToSpaceJ0J1(space, mainPort, others);
+    // Now set the equality constraints for all the other outputs
+    OutputsEqualInputs(space, x);
+  }
+  constexpr void addToSpace(expressionAst &space,
+                            Component<ComponentType::R> &x) const {
+    assert(x.portSize() == 1);
+    Port *inport = x.getPort(0);
+    assert(inport->getPortType() == PortType::IN);
+    bool isIntegral = inport->getOutCausality() == Causality::Effort;
+    size_t value_index = space.append(Symbol{x.getValue(), true});
+    size_t out;
+    if (isIntegral) {
+      size_t in_index = space.append(Symbol{inport->getInCausalName()});
+      out = space.append(Expression<EOP::MUL>(in_index, value_index));
+    } else {
+      size_t in_index = space.append(Symbol{inport->getInCausalName()});
+      out = space.append(Expression<EOP::DIV>(in_index, value_index));
+    }
+    size_t res = space.append(Symbol{inport->getOutCausalName()});
+    res = space.append(Expression<EOP::EQ>{res, out});
+  }
 
   // There the causality is that of the output port
   void assignCausality(Port *out, Port *in, Causality caout, Causality cain) {
