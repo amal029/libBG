@@ -5,9 +5,11 @@
 
 int main() {
   expressionAst ast;
-  size_t l = ast.append(Symbol{"e2"});
+  std::string e2s{"e2"};
+  size_t l = ast.append(Symbol{e2s});
   size_t e2 = l;
-  size_t r = ast.append(Symbol{"usource", true});
+  std::string usources{"usource"};
+  size_t r = ast.append(Symbol{usources, true});
   r = ast.append(Expression<EOP::EQ>(l, r));
   size_t ll = ast.append(Symbol{"df3"});
   size_t dt = ast.append(Symbol{"dt", true});

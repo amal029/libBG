@@ -33,7 +33,7 @@ enum class PortType : std::uint8_t { IN = 0, OUT };
 // The port structure of the component
 struct Port {
   Port(PortType t, size_t ID)
-      : in(Causality::ACausal), out(Causality::ACausal), mType(t), nID(ID) {}
+      : in(Causality::ACausal), out(Causality::ACausal), nID(ID), mType(t) {}
   constexpr bool getAssigned() const { return assigned; }
   void setAssigned() { assigned = true; }
   Port(const Port &) = delete;
@@ -60,28 +60,28 @@ struct Port {
     inCausalName = std::move(in);
   }
   constexpr void setOutCausalName(std::string &&out) {
-    inCausalName = std::move(out);
+    outCausalName = std::move(out);
   }
   constexpr std::string_view getInCausalName() const { return inCausalName; }
   constexpr std::string_view getOutCausalName() const { return outCausalName; }
 
 private:
-  Causality in;  // The in causality
-  Causality out; // The out causality for this port.
   std::string inCausalName;
   std::string outCausalName;
-  bool assigned = false;
-  PortType mType;
-  size_t nID; // neighbour that I am connected to
   // The symbolic values (expressions) each of these ports hold
   expression_t *inx = nullptr;
   expression_t *outx = nullptr;
+  Causality in;  // The in causality
+  Causality out; // The out causality for this port.
+  size_t nID; // neighbour that I am connected to
+  PortType mType;
+  bool assigned = false;
 };
 
 // The common Component class
 template <ComponentType T> struct Component {
   constexpr Component() {} // This is for Bond Graph insertion
-  constexpr Component(const char *n) : myT(T), name(n), ID(Util::getID()) {
+  constexpr Component(const char *n) : name(n), ID(Util::getID()), myT(T) {
     value = (name + std::string("_") + std::to_string(ID));
   }
   constexpr Component(const Component &) = delete;
@@ -129,7 +129,7 @@ template <ComponentType T> struct Component {
   constexpr void setDeleted() { deleted = true; }
   constexpr bool getDeleted() const { return deleted; }
   constexpr const std::string &getValue() const { return value; }
-  constexpr std::string &&getValue() { return std::move(value); }
+  // constexpr std::string &&getValue() { return std::move(value); }
 
   constexpr void assignPortName() {
     if constexpr (T == ComponentType::SE) {
@@ -142,13 +142,13 @@ template <ComponentType T> struct Component {
       ports[0].setOutCausalName("f_" + std::to_string(ID));
     } else if constexpr (T == ComponentType::C) {
       assert(ports.size() == 1);
-      if (ports[0].getInCausality() == Causality::Flow) {
+      if (ports[0].getOutCausality() == Causality::Effort) {
         // Integral causality
         ports[0].setInCausalName("f_" + std::to_string(ID));
-        ports[0].setOutCausalName("e_" + std::to_string(ID));
-      } else if (ports[0].getInCausality() == Causality::Effort) {
+        ports[0].setOutCausalName("de_" + std::to_string(ID));
+      } else if (ports[0].getOutCausality() == Causality::Flow) {
         // Differential causality
-        ports[0].setInCausalName("e_" + std::to_string(ID));
+        ports[0].setInCausalName("de_" + std::to_string(ID));
         ports[0].setOutCausalName("f_" + std::to_string(ID));
       } else {
         throw NotFound(std::format("Component {} not assigned causality", ID));
@@ -157,19 +157,36 @@ template <ComponentType T> struct Component {
       assert(ports.size() == 1);
       if (ports[0].getInCausality() == Causality::Flow) {
         // Differential causality
-        ports[0].setInCausalName("f_" + std::to_string(ID));
+        ports[0].setInCausalName("df_" + std::to_string(ID));
         ports[0].setOutCausalName("e_" + std::to_string(ID));
       } else if (ports[0].getInCausality() == Causality::Effort) {
         // Integral causality
         ports[0].setInCausalName("e_" + std::to_string(ID));
-        ports[0].setOutCausalName("f_" + std::to_string(ID));
+        ports[0].setOutCausalName("df_" + std::to_string(ID));
       } else {
         throw NotFound(std::format("Component {} not assigned causality", ID));
       }
-    } else if constexpr (T == ComponentType::GY || T == ComponentType::TF) {
+    } else if constexpr (T == ComponentType::GY) {
       assert(ports.size() == 2);
       assert(ports[0].getInCausality() == ports[1].getInCausality());
       assert(ports[0].getOutCausality() == ports[1].getOutCausality());
+      if (ports[0].getInCausality() == Causality::Flow) {
+        ports[0].setInCausalName("f_" + std::to_string(ID));
+        ports[1].setInCausalName("f_" + std::to_string(ID));
+        ports[0].setOutCausalName("e_" + std::to_string(ID));
+        ports[1].setOutCausalName("e_" + std::to_string(ID));
+      } else if (ports[0].getInCausality() == Causality::Effort) {
+        ports[0].setInCausalName("e_" + std::to_string(ID));
+        ports[1].setInCausalName("e_" + std::to_string(ID));
+        ports[0].setOutCausalName("f_" + std::to_string(ID));
+        ports[1].setOutCausalName("f_" + std::to_string(ID));
+      } else {
+        throw NotFound(std::format("Component {} not assigned causality", ID));
+      }
+    } else if constexpr (T == ComponentType::TF) {
+      assert(ports.size() == 2);
+      assert(ports[0].getInCausality() != ports[1].getInCausality());
+      assert(ports[0].getOutCausality() != ports[1].getOutCausality());
       if (ports[0].getInCausality() == Causality::Flow) {
         ports[0].setInCausalName("f_" + std::to_string(ID));
         ports[1].setInCausalName("f_" + std::to_string(ID));
@@ -231,15 +248,15 @@ template <ComponentType T> struct Component {
   }
 
 private:
-  ComponentType myT;
-  const char *name; // The user name of the component
-  size_t ID;        // The unique ID generated internally for each component
   std::vector<Port> ports; // The number of ports of this component
-  bool deleted = false;    // Has this been deleted from the graph
-                           // during simplification.
   // The symbolic value of this component
   std::string value;
-  // expression_t *internal; // This is only for C/R/L
+  const char *name; // The user name of the component
+  size_t ID;        // The unique ID generated internally for each component
+  ComponentType myT;
+  bool deleted = false;    // Has this been deleted from the graph
+                           // during simplification.
+
 };
 
 // Printing the enum
@@ -296,9 +313,9 @@ static std::ostream &operator<<(std::ostream &os, const Causality &c) {
 static std::ostream &operator<<(std::ostream &os, const Port &p) {
   os << "{in causality:" << p.getInCausality();
   os << ",";
-  os << p.getInCausalName() << ", ";
+  os << "in causal var: " << p.getInCausalName() << ", ";
   os << "out causality:" << p.getOutCausality() << ", ";
-  os << p.getOutCausalName() << ", ";
+  os << "out causal var: " << p.getOutCausalName() << ", ";
   if (p.getPortType() == PortType::IN)
     os << "type : IN ";
   else

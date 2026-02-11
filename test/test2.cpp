@@ -92,7 +92,7 @@ int main() {
 
   // Now do causal analysis
   bg.assignCausality();
-  // std::cout << bg << "\n";
+  std::cout << bg << "\n";
   // bg.printEdges();
   // Now produce the state space equations
   bg.generateStateSpace();

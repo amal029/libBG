@@ -7,6 +7,7 @@
 #include <ostream>
 #include <queue>
 #include <stdexcept>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -30,21 +31,21 @@ static void print_expression_t(std::ostream &os, const expression_t &in,
                                const expressionAst &ast);
 
 struct Symbol {
-  Symbol(std::string &&n) : name(std::move(n)) {}
-  Symbol(std::string &&n, bool isC) : name(std::move(n)), isConst(isC) {}
+  explicit Symbol(std::string_view n) : name(n) {}
+  explicit Symbol(std::string_view n, bool isC) : name(n), isConst(isC) {}
   Symbol(const Symbol &) = delete;
   Symbol(Symbol &&) = default;
   bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
     return (!isConst);
   }
   T getT() const { return t; }
-  const std::string &getName() const { return name; }
+  const std::string_view &getName() const { return name; }
   void print_expr(std::ostream &os, const expressionAst &ast) const {
     os << getName();
   }
 
 private:
-  std::string name; // change this to string view?
+  std::string_view name; // change this to string view?
   bool isConst = false;
   T t = T::SYM;
 };
@@ -162,7 +163,10 @@ private:
 // Make for each expression_t
 
 struct expressionAst {
-  expressionAst() { arena.emplace_back(Number{0}); }
+  explicit expressionAst() noexcept {
+    arena.emplace_back(Number{0});
+    arena.emplace_back(Symbol{"dt"});
+  };
   [[nodiscard]]
   size_t append(expression_t &&x) {
     arena.emplace_back(std::move(x));
@@ -212,8 +216,7 @@ struct expressionAst {
       // Go through the eqs
       size_t counter = 0;
       for (Expression<EOP::EQ> *x : eqs) {
-        assert(x != nullptr);
-	Symbol *eqls = std::get_if<Symbol>(&arena[x->getLeft()]);
+        Symbol *eqls = std::get_if<Symbol>(&arena[x->getLeft()]);
         if (eqls != nullptr && torepsym->getName() == eqls->getName()) {
           if (visited[counter]) {
             // FIXME: Make the error report better
