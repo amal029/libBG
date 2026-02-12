@@ -32,8 +32,8 @@ static void print_expression_t(std::ostream &os, const expression_t &in,
                                const expressionAst &ast);
 
 struct Symbol {
-  explicit Symbol(std::string_view n) : name(n) {}
-  explicit Symbol(std::string_view n, bool isC) : name(n), isConst(isC) {}
+  constexpr explicit Symbol(std::string_view n) : name(n) {}
+  constexpr explicit Symbol(std::string_view n, bool isC) : name(n), isConst(isC) {}
   Symbol(const Symbol &) = delete;
   Symbol(Symbol &&) = default;
   bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
@@ -99,7 +99,7 @@ static std::ostream &operator<<(std::ostream &os, const T t) {
 }
 
 template <EOP op> struct Expression {
-  Expression(size_t l, size_t r) : left(l), right(r) {
+  constexpr Expression(size_t l, size_t r) : left(l), right(r) {
     if constexpr (op == EOP::ADD) {
       t = T::ADD;
     } else if constexpr (op == EOP::DIV) {
@@ -167,7 +167,7 @@ struct expressionAst {
     arena.emplace_back(Symbol{"dt", true});
   };
   [[nodiscard]]
-  size_t append(expression_t &&x) {
+  constexpr size_t append(expression_t &&x) {
     arena.emplace_back(std::move(x));
     return arena.size() - 1;
   }

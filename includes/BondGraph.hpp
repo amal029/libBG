@@ -11,6 +11,7 @@
 #include <numeric>
 #include <ostream>
 #include <stdexcept>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -39,7 +40,7 @@ struct BondGraph {
   BondGraph(BondGraph &&) = default;
   BondGraph &operator=(const BondGraph &) = delete;
   BondGraph &operator=(BondGraph &&) = default;
-  virtual ~BondGraph() {}
+  ~BondGraph() {}
 
   // Adding components to the graph
   template <ComponentType T> void addComponent(Component<T> &&x) {
@@ -60,11 +61,9 @@ struct BondGraph {
 
   // Get the component you want from the Bond Graph
   template <ComponentType T> Component<T> &getComponent(const char *name) {
-    bool found = true;
+    bool found = false;
     size_t i = 0;
     for (; i < components.size(); ++i) {
-      // Here we need to visit the variant type and get the name of the
-      // thing.
       found = std::visit(
           [&name](auto &x) -> bool {
             return (std::strcmp(x.getName(), name) == 0) && (x.getType() == T);
@@ -342,7 +341,7 @@ private:
   // This function is shared between TF/GY for building the state space.
   [[nodiscard]]
   constexpr size_t addToSpaceTFGY(expressionAst &space, Port *inport,
-                                Port *outport, size_t value_index) {
+                                  Port *outport, size_t value_index) {
     if (inport->getOutCausality() == Causality::Effort) {
       size_t out_in_index = space.append(Symbol{outport->getInCausalName()});
       // outExpression of inport = inExpression of outport * value
@@ -457,10 +456,11 @@ private:
   constexpr void addToSpace(expressionAst &space,
                             Component<ComponentType::J0> &x) {
     // First get the main port with out causality of Effort
-    Port *mainPort;
+    Port *mainPort = nullptr;
     std::vector<Port *> others;
     for (size_t i = 0; i < x.portSize(); ++i) {
       Port *pp = x.getPort(i);
+      // One of the ports has to have this causality.
       if (pp->getInCausality() == Causality::Effort) {
         mainPort = pp;
       } else {
@@ -476,10 +476,11 @@ private:
   constexpr void addToSpace(expressionAst &space,
                             Component<ComponentType::J1> &x) {
     // First get the main port with out causality of Flow
-    Port *mainPort;
+    Port *mainPort = nullptr;
     std::vector<Port *> others;
     for (size_t i = 0; i < x.portSize(); ++i) {
       Port *pp = x.getPort(i);
+      // One of the ports has to have this causality.
       if (pp->getInCausality() == Causality::Flow) {
         mainPort = pp;
       } else {
@@ -556,8 +557,10 @@ private:
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
       if (isAssignedCausality(Causality::Effort, parentPortsAssigned)) {
+        const char *name = std::visit([](const auto &x) { return x.getName(); },
+                                      getComponentAt(myId));
         std::cerr << std::format("Assigning differential causality to {}\n",
-                                 myId);
+                                 name);
         diffCausality();
       } else {
         integralCausality();
@@ -590,8 +593,10 @@ private:
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
       if (isAssignedCausality(Causality::Flow, parentPortsAssigned)) {
+        const char *name = std::visit([](const auto &x) { return x.getName(); },
+                                      getComponentAt(myId));
         std::cerr << std::format("Assigning differential causality to {}\n",
-                                 myId);
+                                 name);
         diffCausality();
       } else {
         integralCausality();

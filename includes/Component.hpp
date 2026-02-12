@@ -71,9 +71,9 @@ private:
   // The symbolic values (expressions) each of these ports hold
   expression_t *inx = nullptr;
   expression_t *outx = nullptr;
-  Causality in;  // The in causality
-  Causality out; // The out causality for this port.
-  size_t nID;    // neighbour that I am connected to
+  Causality in = Causality::ACausal;  // The in causality
+  Causality out = Causality::ACausal; // The out causality for this port.
+  size_t nID = 0;    // neighbour that I am connected to
   PortType mType;
   bool assigned = false;
 };

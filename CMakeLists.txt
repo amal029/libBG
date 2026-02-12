@@ -2,10 +2,11 @@ cmake_minimum_required(VERSION 4.0) # CMake version check
 set(CMAKE_C_COMPILER cc)
 set(CMAKE_CXX_COMPILER c++)
 project(libBG)
-set(CMAKE_CXX_STANDARD 20)
+# Need C++23
+set(CMAKE_CXX_STANDARD 23)
 
 # Include the FindPkgConfig module
-find_package(PkgConfig REQUIRED)
+# find_package(PkgConfig REQUIRED)
 
 # Get package ginac
 # pkg_check_modules(GINAC REQUIRED ginac)
