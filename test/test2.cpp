@@ -26,60 +26,43 @@ int main() {
 
   // Now add these to the bondgraph
   BondGraph bg;
-  bg.addComponent(std::move(se));
-  bg.addComponent(std::move(u0));
-  bg.addComponent(std::move(j1));
-  bg.addComponent(std::move(u12));
-  bg.addComponent(std::move(r));
-  bg.addComponent(std::move(u2));
-  bg.addComponent(std::move(j2));
-  bg.addComponent(std::move(u23));
-  bg.addComponent(std::move(l1));
-  bg.addComponent(std::move(u3));
-  bg.addComponent(std::move(gy));
-  bg.addComponent(std::move(o));
-  bg.addComponent(std::move(l2));
-  bg.addComponent(std::move(r2));
-  bg.addComponent(std::move(tf));
-  bg.addComponent(std::move(v1));
-  bg.addComponent(std::move(se2));
-  bg.addComponent(std::move(l3));
+  bg.addComponent(&se);
+  bg.addComponent(&u0);
+  bg.addComponent(&j1);
+  bg.addComponent(&u12);
+  bg.addComponent(&r);
+  bg.addComponent(&u2);
+  bg.addComponent(&j2);
+  bg.addComponent(&u23);
+  bg.addComponent(&l1);
+  bg.addComponent(&u3);
+  bg.addComponent(&gy);
+  bg.addComponent(&o);
+  bg.addComponent(&l2);
+  bg.addComponent(&r2);
+  bg.addComponent(&tf);
+  bg.addComponent(&v1);
+  bg.addComponent(&se2);
+  bg.addComponent(&l3);
 
   // Now connect components
-  bg.connect(bg.getComponent<ComponentType::SE>("se"),
-             bg.getComponent<ComponentType::J0>("u0"));
-  bg.connect(bg.getComponent<ComponentType::J0>("u0"),
-             bg.getComponent<ComponentType::J1>("j1"));
-  bg.connect(bg.getComponent<ComponentType::J1>("j1"),
-             bg.getComponent<ComponentType::J0>("u12"));
-  bg.connect(bg.getComponent<ComponentType::J0>("u12"),
-             bg.getComponent<ComponentType::R>("r"));
-  bg.connect(bg.getComponent<ComponentType::J1>("j1"),
-             bg.getComponent<ComponentType::J0>("u2"));
-  bg.connect(bg.getComponent<ComponentType::J0>("u2"),
-             bg.getComponent<ComponentType::J1>("j2"));
-  bg.connect(bg.getComponent<ComponentType::J1>("j2"),
-             bg.getComponent<ComponentType::J0>("u23"));
-  bg.connect(bg.getComponent<ComponentType::J0>("u23"),
-             bg.getComponent<ComponentType::L>("l1"));
-  bg.connect(bg.getComponent<ComponentType::J1>("j2"),
-             bg.getComponent<ComponentType::J0>("u3"));
-  bg.connect(bg.getComponent<ComponentType::J0>("u3"),
-             bg.getComponent<ComponentType::GY>("gy"));
-  bg.connect(bg.getComponent<ComponentType::GY>("gy"),
-             bg.getComponent<ComponentType::J1>("o"));
-  bg.connect(bg.getComponent<ComponentType::J1>("o"),
-             bg.getComponent<ComponentType::L>("l2"));
-  bg.connect(bg.getComponent<ComponentType::J1>("o"),
-             bg.getComponent<ComponentType::R>("r2"));
-  bg.connect(bg.getComponent<ComponentType::J1>("o"),
-             bg.getComponent<ComponentType::TF>("tf"));
-  bg.connect(bg.getComponent<ComponentType::TF>("tf"),
-             bg.getComponent<ComponentType::J1>("v1"));
-  bg.connect(bg.getComponent<ComponentType::J1>("v1"),
-             bg.getComponent<ComponentType::L>("l3"));
-  bg.connect(bg.getComponent<ComponentType::SE>("se2"),
-             bg.getComponent<ComponentType::J1>("v1"));
+  bg.connect(se, u0);
+  bg.connect(u0, j1);
+  bg.connect(j1, u12);
+  bg.connect(u12, r);
+  bg.connect(j1, u2);
+  bg.connect(u2, j2);
+  bg.connect(j2, u23);
+  bg.connect(u23, l1);
+  bg.connect(j2, u3);
+  bg.connect(u3, gy);
+  bg.connect(gy, o);
+  bg.connect(o, l2);
+  bg.connect(o, r2);
+  bg.connect(o, tf);
+  bg.connect(tf, v1);
+  bg.connect(v1, l3);
+  bg.connect(se2, v1);
 
   // Try simplifying this graph
   bg.simplify(); // works fine.
@@ -88,20 +71,17 @@ int main() {
   bg.assignCausality();
   // Now produce the state space equations
   expressionAst ast = bg.generateStateSpace();
-  const expression_t &res =
-      bg.getComponent<ComponentType::L>("l1").getStateEq(ast);
+  const expression_t &res = l1.getStateEq(ast);
   std::cout << std::format("State eq l1: ");
   print_expression_t(std::cout, res, ast);
   std::cout << "\n";
 
-  const expression_t &res2 =
-      bg.getComponent<ComponentType::L>("l2").getStateEq(ast);
+  const expression_t &res2 = l2.getStateEq(ast);
   std::cout << std::format("State eq l2: ");
   print_expression_t(std::cout, res2, ast);
   std::cout << "\n";
 
-  const expression_t &res3 =
-      bg.getComponent<ComponentType::L>("l3").getStateEq(ast);
+  const expression_t &res3 = l3.getStateEq(ast);
   std::cout << std::format("State eq l3: ");  
   print_expression_t(std::cout, res3, ast);
   std::cout << "\n";

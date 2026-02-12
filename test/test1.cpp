@@ -11,27 +11,21 @@ int main() {
   Component<ComponentType::J0> j00{"j00"};   // 1 Junction (in series)
   Component<ComponentType::J0> j000{"j000"}; // 1 Junction (in series)
   BondGraph bg;
-  bg.addComponent(std::move(se));
-  bg.addComponent(std::move(r));
-  bg.addComponent(std::move(c));
-  bg.addComponent(std::move(j1));
-  bg.addComponent(std::move(j0));
-  bg.addComponent(std::move(j00));
-  bg.addComponent(std::move(j000));
+  bg.addComponent(&se);
+  bg.addComponent(&r);
+  bg.addComponent(&c);
+  bg.addComponent(&j1);
+  bg.addComponent(&j0);
+  bg.addComponent(&j00);
+  bg.addComponent(&j000);
 
   // Now make the connections
-  bg.connect(bg.getComponent<ComponentType::SE>("se"),
-             bg.getComponent<ComponentType::J0>("j0"));
-  bg.connect(bg.getComponent<ComponentType::J0>("j0"),
-             bg.getComponent<ComponentType::J1>("j1"));
-  bg.connect(bg.getComponent<ComponentType::J1>("j1"),
-             bg.getComponent<ComponentType::J0>("j00"));
-  bg.connect(bg.getComponent<ComponentType::J0>("j00"),
-             bg.getComponent<ComponentType::R>("r"));
-  bg.connect(bg.getComponent<ComponentType::J1>("j1"),
-             bg.getComponent<ComponentType::J0>("j000"));
-  bg.connect(bg.getComponent<ComponentType::J0>("j000"),
-             bg.getComponent<ComponentType::C>("c"));
+  bg.connect(se, j0);
+  bg.connect(j0, j1);
+  bg.connect(j1, j00);
+  bg.connect(j00, r);
+  bg.connect(j1, j000);
+  bg.connect(j000, c);
 
   std::cout << bg;
   // Test try to simplify it

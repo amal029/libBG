@@ -11,7 +11,6 @@
 #include <numeric>
 #include <ostream>
 #include <stdexcept>
-#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -27,11 +26,11 @@
 
 // This is the variant with all the different components
 using componentVariant =
-    std::variant<Component<ComponentType::C>, Component<ComponentType::L>,
-                 Component<ComponentType::J0>, Component<ComponentType::J1>,
-                 Component<ComponentType::R>, Component<ComponentType::SE>,
-                 Component<ComponentType::SF>, Component<ComponentType::GY>,
-                 Component<ComponentType::TF>>;
+    std::variant<Component<ComponentType::C> *, Component<ComponentType::L> *,
+                 Component<ComponentType::J0> *, Component<ComponentType::J1> *,
+                 Component<ComponentType::R> *, Component<ComponentType::SE> *,
+                 Component<ComponentType::SF> *, Component<ComponentType::GY> *,
+                 Component<ComponentType::TF> *>;
 
 struct BondGraph {
   // Public methods
@@ -43,10 +42,10 @@ struct BondGraph {
   ~BondGraph() {}
 
   // Adding components to the graph
-  template <ComponentType T> void addComponent(Component<T> &&x) {
+  template <ComponentType T> void addComponent(Component<T> *x) {
     // We need to push the pointer to the correct position according to
     // the ID of the component.
-    size_t els = x.getID();
+    size_t els = x->getID();
     if (components.size() <= els) {
       // Then increase the size of the vector
       components.resize(els + 1);
@@ -56,27 +55,28 @@ struct BondGraph {
       // Reserve space in visited vector too
       visited.resize(els + 1, false);
     }
-    components[els] = std::move(x); // add it to the correct position
+    components[els] = x; // add it to the correct position
   }
 
   // Get the component you want from the Bond Graph
-  template <ComponentType T> Component<T> &getComponent(const char *name) {
-    bool found = false;
-    size_t i = 0;
-    for (; i < components.size(); ++i) {
-      found = std::visit(
-          [&name](auto &x) -> bool {
-            return (std::strcmp(x.getName(), name) == 0) && (x.getType() == T);
-          },
-          components[i]);
-      if (found)
-        break;
-    }
-    if (!found) {
-      throw NotFound(std::format("Component named {} not found!", name));
-    }
-    return std::get<Component<T>>(components[i]);
-  }
+  // template <ComponentType T> Component<T> &getComponent(const char *name) {
+  //   bool found = false;
+  //   size_t i = 0;
+  //   for (; i < components.size(); ++i) {
+  //     found = std::visit(
+  //         [&name](auto &x) -> bool {
+  //           return (std::strcmp(x.getName(), name) == 0) && (x.getType() ==
+  //           T);
+  //         },
+  //         components[i]);
+  //     if (found)
+  //       break;
+  //   }
+  //   if (!found) {
+  //     throw NotFound(std::format("Component named {} not found!", name));
+  //   }
+  //   return std::get<Component<T>>(components[i]);
+  // }
 
   // Adding the edge between the components (also add the port for these
   // components)
@@ -106,15 +106,15 @@ struct BondGraph {
 
   // Get all the source IDs in the graph
   void getSources(std::vector<size_t> &sources) const {
-    using source_e = Component<ComponentType::SE>;
-    using source_f = Component<ComponentType::SF>;
+    using source_e = Component<ComponentType::SE>*;
+    using source_f = Component<ComponentType::SF> *;
 
     for (size_t i = 0; i < getNumComponents(); ++i) {
       auto &vv = getComponentAt(i);
       if (std::holds_alternative<source_e>(vv)) {
-        sources.push_back(std::get<source_e>(vv).getID());
+        sources.push_back(std::get<source_e>(vv)->getID());
       } else if (std::holds_alternative<source_f>(vv)) {
-        sources.push_back(std::get<source_f>(vv).getID());
+        sources.push_back(std::get<source_f>(vv)->getID());
       }
     }
   }
@@ -130,7 +130,7 @@ struct BondGraph {
     // possible.
     size_t i = 0;
     for (bool x : visited) {
-      bool deleted = std::visit([](const auto &x) { return x.getDeleted(); },
+      bool deleted = std::visit([](const auto &x) { return x->getDeleted(); },
                                 components[i]);
       if (!x && !deleted) {
         DFS<Callable, PRE>(i, f); // Visit if not visited
@@ -145,10 +145,10 @@ struct BondGraph {
     std::vector<size_t> sources;
     getSources(sources);
     // Eliminate junctions
-    auto visitorElim = [&](auto &x) { simplify1(x); };
+    auto visitorElim = [&](auto &x) { simplify1(*x); };
     dfs(sources, visitorElim);
     // Contract junctions (step 2)
-    auto visitorContract = [&](auto &x) { simplify2(x); };
+    auto visitorContract = [&](auto &x) { simplify2(*x); };
     dfs(sources, visitorContract);
   }
   void assignCausality() {
@@ -161,7 +161,7 @@ struct BondGraph {
       Causality in, out;
       // Now assign the effort and flow causality for this source (also sets
       // assigned for the port)
-      ComponentType myT = std::visit([](const auto &x) { return x.getType(); },
+      ComponentType myT = std::visit([](const auto &x) { return x->getType(); },
                                      getComponentAt(s));
       if (myT == ComponentType::SE) {
         out = Causality::Effort;
@@ -182,7 +182,7 @@ struct BondGraph {
     }
 
     // Here do a dfs of the graph and for each port give it a name
-    auto visitor = [](auto &x) { x.assignPortName(); };
+    auto visitor = [](auto &x) { x->assignPortName(); };
     dfs(sources, visitor);
   }
 
@@ -200,7 +200,7 @@ struct BondGraph {
     // Get all the sources and move along the graph in dfs
     std::vector<size_t> sources;
     getSources(sources);
-    auto visitor = [&](auto &x) { addToSpace(ast, x); };
+    auto visitor = [&](auto &x) { addToSpace(ast, *x); };
     // This is by default pre-order traversal
     dfs(sources, visitor);
     return ast;
@@ -220,7 +220,7 @@ private:
   void printEdges(std::vector<std::vector<size_t>> &edges) {
     std::cout << "[";
     for (size_t i = 0; i < edges.size(); ++i) {
-      bool isDeleted = std::visit([](const auto &x) { return x.getDeleted(); },
+      bool isDeleted = std::visit([](const auto &x) { return x->getDeleted(); },
                                   getComponentAt(i));
       if (isDeleted)
         continue;
@@ -557,7 +557,7 @@ private:
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
       if (isAssignedCausality(Causality::Effort, parentPortsAssigned)) {
-        const char *name = std::visit([](const auto &x) { return x.getName(); },
+        const char *name = std::visit([](const auto &x) { return x->getName(); },
                                       getComponentAt(myId));
         std::cerr << std::format("Assigning differential causality to {}\n",
                                  name);
@@ -593,7 +593,7 @@ private:
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
       if (isAssignedCausality(Causality::Flow, parentPortsAssigned)) {
-        const char *name = std::visit([](const auto &x) { return x.getName(); },
+        const char *name = std::visit([](const auto &x) { return x->getName(); },
                                       getComponentAt(myId));
         std::cerr << std::format("Assigning differential causality to {}\n",
                                  name);
@@ -760,10 +760,10 @@ private:
 
     // The vector of ports that have been assigned already for Junction id
     std::vector<const Port *> assignedPorts;
-    size_t numPorts = std::visit([](const auto &x) { return x.portSize(); },
+    size_t numPorts = std::visit([](const auto &x) { return x->portSize(); },
                                  getComponentAt(id));
     for (size_t i = 0; i < numPorts; ++i) {
-      const Port *p = std::visit([&i](const auto &x) { return x.getPort(i); },
+      const Port *p = std::visit([&i](const auto &x) { return x->getPort(i); },
                                  getComponentAt(id));
       // If p is not already in assignedPorts and is assigned then add
       if (p->getAssigned()) {
@@ -794,13 +794,13 @@ private:
     std::vector<Port *> jports;
     std::vector<Port *> myjports;
 
-    ComponentType myType = std::visit([](const auto &x) { return x.getType(); },
+    ComponentType myType = std::visit([](const auto &x) { return x->getType(); },
                                       getComponentAt(id));
 
     for (size_t counter = 0; counter < edges[id].size(); ++counter) {
       size_t x = edges[id][counter];
       Port *myPort =
-          std::visit([&x](auto &y) { return y.getPortWithNeighbourID(x); },
+          std::visit([&x](auto &y) { return y->getPortWithNeighbourID(x); },
                      getComponentAt(id));
       assert(myPort->getPortType() == PortType::OUT);
       Port *nport = getCausalPort(x, id);
@@ -808,7 +808,7 @@ private:
       if (!nport->getAssigned()) {
         // Is the component at x a preferred causality component?
         ComponentType nType = std::visit(
-            [](const auto &x) -> ComponentType { return x.getType(); },
+            [](const auto &x) -> ComponentType { return x->getType(); },
             getComponentAt(x));
         switch (nType) {
         case ComponentType::C: {
@@ -900,7 +900,7 @@ private:
     // that constraints are satisfied.
     assignedPorts.clear();
     for (size_t i = 0; i < numPorts; ++i) {
-      const Port *p = std::visit([&i](const auto &x) { return x.getPort(i); },
+      const Port *p = std::visit([&i](const auto &x) { return x->getPort(i); },
                                  getComponentAt(id));
       if (p->getAssigned()) {
         assignedPorts.push_back(p);
@@ -911,7 +911,7 @@ private:
           std::format("All of junction {}' port not assigned", id));
     }
     // All constraints on this junction are satisfied
-    std::visit([](const auto &x) { x.satisfyConstraints(); },
+    std::visit([](const auto &x) { x->satisfyConstraints(); },
                getComponentAt(id));
   }
 
@@ -920,7 +920,7 @@ private:
   constexpr Port *getCausalPort(size_t id, size_t pid) {
     // Get the port with the pid as neighbour
     Port *myPort = std::visit(
-        [&pid](auto &x) -> Port * { return x.getPortWithNeighbourID(pid); },
+        [&pid](auto &x) -> Port * { return x->getPortWithNeighbourID(pid); },
         getComponentAt(id));
     assert(myPort->getPortType() == PortType::IN);
     return myPort;
@@ -937,7 +937,7 @@ private:
     size_t nid = edges[id][0]; // neighbour id
     // Now assign the given causality to the outgoing port
     Port *myPort = // my outgoing port to the neighbour
-        std::visit([&nid](auto &x) { return x.getPortWithNeighbourID(nid); },
+        std::visit([&nid](auto &x) { return x->getPortWithNeighbourID(nid); },
                    getComponentAt(id));
 
     // Setting the causality of the junction connected to me
@@ -970,7 +970,7 @@ private:
     // Now replace the index value with nextid
     *index = nextId;
     Port *p =
-        std::visit([&id](auto &x) { return x.getPortWithNeighbourID(id); },
+        std::visit([&id](auto &x) { return x->getPortWithNeighbourID(id); },
                    getComponentAt(prevId));
     assert(p != nullptr && p->getNeighbourID() == id &&
            p->getPortType() == PortType::OUT);
@@ -980,7 +980,7 @@ private:
     auto index1 = std::find(redges[nextId].begin(), redges[nextId].end(), id);
     assert(index1 != redges[nextId].end());
     *index1 = prevId;
-    p = std::visit([&id](auto &x) { return x.getPortWithNeighbourID(id); },
+    p = std::visit([&id](auto &x) { return x->getPortWithNeighbourID(id); },
                    getComponentAt(nextId));
     assert(p != nullptr && p->getNeighbourID() == id &&
            p->getPortType() == PortType::IN);
@@ -1000,7 +1000,7 @@ private:
     size_t counter = 0;
     for (size_t nid : edges[id]) {
       ComponentType nType = std::visit(
-          [&](const auto &y) -> ComponentType { return y.getType(); },
+          [&](const auto &y) -> ComponentType { return y->getType(); },
           getComponentAt(nid));
       counter += (nType == T) ? 1 : 0;
     }
@@ -1018,7 +1018,7 @@ private:
 
     // Now update the port for x to change id --> nid
     Port *p =
-        std::visit([&id](auto &y) { return y.getPortWithNeighbourID(id); },
+        std::visit([&id](auto &y) { return y->getPortWithNeighbourID(id); },
                    getComponentAt(x));
     assert(p != nullptr && p->getNeighbourID() == id && p->getPortType() == f);
     p->setNeighbourID(nid);
@@ -1028,7 +1028,7 @@ private:
     if (niter == redges[nid].end()) {
       redges[nid].push_back(x);
       componentVariant &nComponent = getComponentAt(nid);
-      std::visit([&x, &s](auto &c) { c.addPort(Port(s, x)); }, nComponent);
+      std::visit([&x, &s](auto &c) { c->addPort(Port(s, x)); }, nComponent);
     }
   }
 
@@ -1040,7 +1040,7 @@ private:
     for (size_t x : edges[id]) {
       // const componentVariant &comp = getComponentAt(*x);
       bool res =
-          std::visit([&mType](const auto &y) { return y.getType() == mType; },
+          std::visit([&mType](const auto &y) { return y->getType() == mType; },
                      getComponentAt(x));
       if (res) {
         nid = x;
@@ -1053,7 +1053,7 @@ private:
     assert(redgeptr != redges[nid].end());
     redges[nid].erase(redgeptr); // remove the reverse edge from nid to id
     // Remove the port from the vector of ports of nid connected to id.
-    std::visit([&id](auto &x) { x.remPort(id); }, getComponentAt(nid));
+    std::visit([&id](auto &x) { x->remPort(id); }, getComponentAt(nid));
 
     // Now connect all the inputs from id to nid' input
     for (size_t x : redges[id]) {
@@ -1067,7 +1067,7 @@ private:
       contractJunction1(x, id, nid, PortType::IN, PortType::OUT, redges, edges);
     }
     // Set this node to deleted
-    std::visit([](auto &x) { x.setDeleted(); }, getComponentAt(id));
+    std::visit([](auto &x) { x->setDeleted(); }, getComponentAt(id));
   }
 
   // XXX: Depth first traversal with default pre-order traversal

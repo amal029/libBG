@@ -5,38 +5,26 @@
 
 int main() {
 
-  // Example of an expression
-  // expressionAst ast;
-  // expression_t *t = ast.append(make_expr(Symbol("x")));
-  // expression_t *t1 = ast.append(make_expr(Number(10)));
-  // t = ast.append(make_expr(Expression<EOP::MUL>(t, t1)));
-  // ast.printExpression(std::cout, ast[ast.size() - 1]);
-  // std::cout << "\n";
-
   // Declare a Capacitor
   Component<ComponentType::C> c{"c"};    // capacitor
   Component<ComponentType::SE> se{"se"}; // voltage (effort) source
   Component<ComponentType::R> r{"r"};    // resistor
   Component<ComponentType::J1> j{"1"};   // 1 Junction (in series)
 
-  Component c1{std::move(c)};
 
   // // Add the components to the BondGraph
   BondGraph bg;
-  bg.addComponent(std::move(c1));
-  bg.addComponent(std::move(se));
-  bg.addComponent(std::move(r));
-  bg.addComponent(std::move(j));
-
-  auto &j1 = bg.getComponent<ComponentType::J1>("1");
+  bg.addComponent(&c);
+  bg.addComponent(&se);
+  bg.addComponent(&r);
+  bg.addComponent(&j);
 
   // Make the connections -- we don't have to do it this way. We can use
   // the moved object, but be careful in that case -- it is
   // implementation defined then.
-  bg.connect(bg.getComponent<ComponentType::SE>("se"),
-             j1); // This causes seg fault??
-  bg.connect(j1, bg.getComponent<ComponentType::R>("r"));
-  bg.connect(j1, bg.getComponent<ComponentType::C>("c"));
+  bg.connect(se, j);
+  bg.connect(j, r);
+  bg.connect(j, c);
 
   // Print the bond graph
   std::cout << bg; // This is done by traversing the graph
