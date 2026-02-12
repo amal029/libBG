@@ -73,7 +73,7 @@ private:
   expression_t *outx = nullptr;
   Causality in;  // The in causality
   Causality out; // The out causality for this port.
-  size_t nID; // neighbour that I am connected to
+  size_t nID;    // neighbour that I am connected to
   PortType mType;
   bool assigned = false;
 };
@@ -252,7 +252,61 @@ template <ComponentType T> struct Component {
   constexpr void setInternalName(std::string &&s) { internal = std::move(s); }
   constexpr std::string &getInternalName() { return internal; }
 
+  // Get the state equation for the given component
+  [[nodiscard]]
+  constexpr const expression_t &getStateEq(expressionAst &ast) const {
+    if constexpr (T == ComponentType::L) {
+      const Port *p = getPort(0);
+      std::vector<size_t> eqs = ast.getEQ();
+      if (p->getOutCausality() == Causality::Flow) {
+        std::string ss = "d" + std::string(p->getOutCausalName());
+        return pr_getStateEq(ast, ss, eqs);
+      } else {
+        std::string_view ss = p->getInCausalName();
+        return pr_getStateEq(ast, ss, eqs);
+      }
+    } else if constexpr (T == ComponentType::C) {
+      const Port *p = getPort(0);
+      std::vector<size_t> eqs = ast.getEQ();
+      if (p->getOutCausality() == Causality::Effort) {
+        std::string ss = "d" + std::string(p->getOutCausalName());
+        return pr_getStateEq(ast, ss, eqs);
+      } else {
+        std::string_view ss = p->getInCausalName();
+        return pr_getStateEq(ast, ss, eqs);
+      }
+    } else {
+      throw NotFound("State equations only exist for storage-elements L/C");
+    }
+  }
+
 private:
+  constexpr const expression_t &pr_getStateEq(expressionAst &ast,
+                                              std::string_view ss,
+                                              std::vector<size_t> &eqs) const {
+    size_t toget = 0;
+    // Take the derivative (symbol) of the output
+    for (size_t x : eqs) {
+      const Expression<EOP::EQ> *y = std::get_if<Expression<EOP::EQ>>(&ast[x]);
+      assert(y != nullptr);
+      const Symbol *sn = std::get_if<Symbol>(&ast[y->getLeft()]);
+      if (sn->getName() == ss) {
+        toget = x;
+        break;
+      }
+    }
+    if (toget != 0) {
+      // print_expression_t(std::cout, ast[toget], ast);
+      // std::cout << "\n";
+      ast.simplify(toget, eqs);
+      return ast[toget];
+      // print_expression_t(std::cout, ast[toget], ast);
+      // std::cout << "\n";
+    } else {
+      throw NotFound("Did not find the variables for storage element");
+    }
+  }
+
   std::vector<Port> ports; // The number of ports of this component
   // The symbolic value of this component
   std::string value;
@@ -263,7 +317,6 @@ private:
   ComponentType myT;
   bool deleted = false;    // Has this been deleted from the graph
                            // during simplification.
-
 };
 
 // Printing the enum
