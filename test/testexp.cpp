@@ -1,6 +1,7 @@
 #include "../includes/expression.hpp"
 #include <cstddef>
 #include <iostream>
+#include <ostream>
 #include <vector>
 
 int main() {
@@ -47,15 +48,21 @@ int main() {
   l = ast.append(Expression<EOP::EQ>{f6, r});
 
   // Get the equality expressions
-  std::vector<Expression<EOP::EQ> *> eqs = ast.getEQ();
-  for (const Expression<EOP::EQ> *x : eqs) {
-    x->print_expr(std::cout, ast);
-    std::cout << "\n";
-  }
+  std::vector<size_t> eqs = ast.getEQ();
+  // for (const Expression<EOP::EQ> *x : eqs) {
+  //   x->print_expr(std::cout, ast);
+  //   std::cout << "\n";
+  // }
+
+  // std::cout << ast;
 
   // Simplify an expression
-  ast.simplify(1, eqs); // Simplify the index 1 expression
-  eqs[1]->print_expr(std::cout, ast);
+  print_expression_t(std::cout, ast[13], ast);
+  std::cout << "\n";
+  ast.simplify(13, eqs); // Simplify the index 1 expression
+  std::cout << "------------------\n";
+  print_expression_t(std::cout, ast[13], ast);
+  std::cout << "\n";
 
   return 0;
 }

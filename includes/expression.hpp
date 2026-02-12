@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <iostream>
 #include <ostream>
 #include <queue>
@@ -36,6 +37,8 @@ struct Symbol {
   Symbol(const Symbol &) = delete;
   Symbol(Symbol &&) = default;
   bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
+    // std::cout << "Checking symbol: " << name << " return: " << (!isConst) <<
+    // "\n";
     return (!isConst);
   }
   T getT() const { return t; }
@@ -110,18 +113,16 @@ template <EOP op> struct Expression {
     }
   }
   bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
-
     bool res = std::visit([&](auto &x) { return x.pushSymbol(q, arena); },
                           arena[left]);
-    if (res) {
-      q.push(&left);
+    if constexpr (op != EOP::EQ) {
+      if (res)
+        q.push(&left);
     }
-
     res = std::visit([&](auto &x) { return x.pushSymbol(q, arena); },
                      arena[right]);
-    if (res) {
+    if (res)
       q.push(&right);
-    }
     return false;
   }
 
@@ -145,7 +146,7 @@ template <EOP op> struct Expression {
     } else if constexpr (op == EOP::DIV) {
       os << " / ";
     } else if constexpr (op == EOP::EQ) {
-      os << " == ";
+      os << " = ";
     } else if constexpr (op == EOP::SUB) {
       os << " - ";
     }
@@ -160,12 +161,10 @@ private:
   T t;
 };
 
-// Make for each expression_t
-
 struct expressionAst {
   explicit expressionAst() noexcept {
     arena.emplace_back(Number{0});
-    arena.emplace_back(Symbol{"dt"});
+    arena.emplace_back(Symbol{"dt", true});
   };
   [[nodiscard]]
   size_t append(expression_t &&x) {
@@ -181,14 +180,19 @@ struct expressionAst {
     return arena.size();
   }
 
+  expressionAst(const expressionAst &) = delete;
+  expressionAst(expressionAst &&) = default;
+  expressionAst &operator=(const expressionAst &) = delete;
+  expressionAst &operator=(expressionAst &&) = default;
+
   // Get the Equality expressions
-  std::vector<Expression<EOP::EQ> *> getEQ() {
-    std::vector<Expression<EOP::EQ> *> toret;
+  std::vector<size_t> getEQ() {
+    std::vector<size_t> toret;
     toret.reserve(arena.size());
     for (size_t i = 0; i < arena.size(); ++i) {
       Expression<EOP::EQ> *pp = std::get_if<Expression<EOP::EQ>>(&arena[i]);
       if (pp != nullptr) {
-        toret.push_back(pp);
+        toret.push_back(i);
       }
     }
     return toret;
@@ -200,12 +204,18 @@ struct expressionAst {
   }
 
   // Simplification algorithm
-  void simplify(size_t eq_index,
-                const std::vector<Expression<EOP::EQ> *> &eqs) {
+  void simplify(size_t eq_index, const std::vector<size_t> &eqs) {
     std::queue<size_t *> q;
-    getNonConstSymbols(eqs[eq_index]->getRight(), q);
+    Expression<EOP::EQ> *res =
+        std::get_if<Expression<EOP::EQ>>(&arena[eq_index]);
+    if (res != nullptr) {
+      getNonConstSymbols(eq_index, q);
+    } else {
+      throw std::runtime_error("Cannot simplify non equality expression\n");
+    }
     std::vector<bool> visited;
     visited.resize(eqs.size());
+    // Set the current equality to true
     while (!q.empty()) {
       size_t *torep = q.front();
       q.pop();
@@ -215,18 +225,26 @@ struct expressionAst {
       Symbol *torepsym = (Symbol *)&arena[*torep];
       // Go through the eqs
       size_t counter = 0;
-      for (Expression<EOP::EQ> *x : eqs) {
+      for (size_t jj : eqs) {
+        Expression<EOP::EQ> *x = std::get_if<Expression<EOP::EQ>>(&arena[jj]);
+        assert(x != nullptr);
         Symbol *eqls = std::get_if<Symbol>(&arena[x->getLeft()]);
         if (eqls != nullptr && torepsym->getName() == eqls->getName()) {
           if (visited[counter]) {
-            // FIXME: Make the error report better
-            throw std::runtime_error(
-                "Algebraic loop detected when simplifying");
+            x->print_expr(std::cerr, *this);
+            std::cerr << "\n";
+            throw std::runtime_error("Algebraic Loop");
           }
           visited[counter] = true;
           *torep = x->getRight(); // replaced
-          // Now push any new symbols into the q
-          getNonConstSymbols(*torep, q);
+          if (getNonConstSymbols(*torep, q)) {
+            q.push(torep);
+          }
+          break;
+        } else if (eqls == nullptr) {
+          x->print_expr(std::cerr, *this);
+          std::cerr << "\n";
+          throw std::runtime_error("Left side of equality is not a symbol");
         }
         ++counter;
       }
@@ -240,4 +258,12 @@ private:
 static void print_expression_t(std::ostream &os, const expression_t &in,
                                const expressionAst &ast) {
   std::visit([&os, &ast](const auto &x) { x.print_expr(os, ast); }, in);
+}
+
+static std::ostream &operator<<(std::ostream &os, const expressionAst &ast) {
+  for (size_t i = 0; i < ast.size(); ++i) {
+    print_expression_t(os, ast[i], ast);
+    os << "\n";
+  }
+  return os;
 }

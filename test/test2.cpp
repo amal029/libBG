@@ -1,6 +1,9 @@
 #include "BondGraph.hpp"
 #include "Component.hpp"
+#include "expression.hpp"
 #include <iostream>
+#include <string_view>
+#include <variant>
 
 int main() {
   Component<ComponentType::SE> se{"se"};
@@ -44,7 +47,6 @@ int main() {
   bg.addComponent(std::move(se2));
   bg.addComponent(std::move(l3));
 
-
   // Now connect components
   bg.connect(bg.getComponent<ComponentType::SE>("se"),
              bg.getComponent<ComponentType::J0>("u0"));
@@ -81,19 +83,94 @@ int main() {
   bg.connect(bg.getComponent<ComponentType::SE>("se2"),
              bg.getComponent<ComponentType::J1>("v1"));
 
-  // std::cout << bg << "\n";
   // Try simplifying this graph
   bg.simplify(); // works fine.
-  // std::cout << "------------------\n";
-  // std::cout << bg << "\n";
-  // bg.printEdges();
-  // std::cout << "--------\n";
-  // bg.printReverseEdges();
 
   // Now do causal analysis
   bg.assignCausality();
-  std::cout << bg << "\n";
-  // bg.printEdges();
   // Now produce the state space equations
-  bg.generateStateSpace();
+  expressionAst ast = bg.generateStateSpace();
+  std::vector<size_t> eqs = ast.getEQ();
+
+  // for (size_t x : eqs) {
+  //   const Expression<EOP::EQ> *y = std::get_if<Expression<EOP::EQ>>(&ast[x]);
+  //   assert(y != nullptr);
+  //   y->print_expr(std::cout, ast);
+  //   std::cout << "\n";
+  // }
+  
+  Port *p = bg.getComponent<ComponentType::L>("l1").getPort(0);
+  if (p->getOutCausality() == Causality::Flow) {
+    // Integral causality: We want to solve for the derivative of the
+    // effort of this storage element
+    size_t toget = 0;
+    // Take the derivative (symbol) of the output
+    std::string ss = "d" + std::string(p->getOutCausalName());
+    for (size_t x : eqs) {
+      const Expression<EOP::EQ> *y = std::get_if<Expression<EOP::EQ>>(&ast[x]);
+      assert(y != nullptr);
+      const Symbol *sn = std::get_if<Symbol>(&ast[y->getLeft()]);
+      if (sn->getName() == ss) {
+        toget = x;
+        break;
+      }
+    }
+    if (toget != 0) {
+      print_expression_t(std::cout, ast[toget], ast);
+      std::cout << "\n";
+      ast.simplify(toget, eqs);
+      print_expression_t(std::cout, ast[toget], ast);
+      std::cout << "\n";
+    }
+  }
+
+  p = bg.getComponent<ComponentType::L>("l2").getPort(0);
+  if (p->getOutCausality() == Causality::Flow) {
+    // Integral causality: We want to solve for the derivative of the
+    // effort of this storage element
+    size_t toget = 0;
+    // Take the derivative (symbol) of the output
+    std::string ss = "d" + std::string(p->getOutCausalName());
+    for (size_t x : eqs) {
+      const Expression<EOP::EQ> *y = std::get_if<Expression<EOP::EQ>>(&ast[x]);
+      assert(y != nullptr);
+      const Symbol *sn = std::get_if<Symbol>(&ast[y->getLeft()]);
+      if (sn->getName() == ss) {
+        toget = x;
+        break;
+      }
+    }
+    if (toget != 0) {
+      print_expression_t(std::cout, ast[toget], ast);
+      std::cout << "\n";
+      ast.simplify(toget, eqs);
+      print_expression_t(std::cout, ast[toget], ast);
+      std::cout << "\n";
+    }
+  }
+
+  // The third storage element (with differential causality)
+  p = bg.getComponent<ComponentType::L>("l3").getPort(0);
+  if (p->getOutCausality() == Causality::Effort) {
+    // Differential causality then
+    // We want to solve for the flow of this storage element
+    size_t toget = 0;
+    std::string_view ss = p->getInCausalName();
+    for (size_t x : eqs) {
+      const Expression<EOP::EQ> *y = std::get_if<Expression<EOP::EQ>>(&ast[x]);
+      assert(y != nullptr);
+      const Symbol *sn = std::get_if<Symbol>(&ast[y->getLeft()]);
+      if (sn->getName() == ss) {
+        toget = x;
+        break;
+      }
+    }
+    if (toget != 0) {
+      print_expression_t(std::cout, ast[toget], ast);
+      std::cout << "\n";
+      ast.simplify(toget, eqs);
+      print_expression_t(std::cout, ast[toget], ast);
+      std::cout << "\n";
+    }
+  }
 }
