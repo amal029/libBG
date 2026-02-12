@@ -58,26 +58,6 @@ struct BondGraph {
     components[els] = x; // add it to the correct position
   }
 
-  // Get the component you want from the Bond Graph
-  // template <ComponentType T> Component<T> &getComponent(const char *name) {
-  //   bool found = false;
-  //   size_t i = 0;
-  //   for (; i < components.size(); ++i) {
-  //     found = std::visit(
-  //         [&name](auto &x) -> bool {
-  //           return (std::strcmp(x.getName(), name) == 0) && (x.getType() ==
-  //           T);
-  //         },
-  //         components[i]);
-  //     if (found)
-  //       break;
-  //   }
-  //   if (!found) {
-  //     throw NotFound(std::format("Component named {} not found!", name));
-  //   }
-  //   return std::get<Component<T>>(components[i]);
-  // }
-
   // Adding the edge between the components (also add the port for these
   // components)
   template <ComponentType X, ComponentType Y>
@@ -184,14 +164,6 @@ struct BondGraph {
     // Here do a dfs of the graph and for each port give it a name
     auto visitor = [](auto &x) { x->assignPortName(); };
     dfs(sources, visitor);
-  }
-
-  // Print the state space variables for debuggning for now
-  template <ComponentType T>
-  void print_storage(const Component<T> &comp, expressionAst &ast) {
-    // Get my internal expression
-    // expression_t *internal = comp.getInternalExpression();
-    // ast.printExpression(std::cout, internal);
   }
 
   // This will generate the state space system for the bond graph
@@ -557,8 +529,8 @@ private:
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
       if (isAssignedCausality(Causality::Effort, parentPortsAssigned)) {
-        const char *name = std::visit([](const auto &x) { return x->getName(); },
-                                      getComponentAt(myId));
+        const char *name = std::visit(
+            [](const auto &x) { return x->getName(); }, getComponentAt(myId));
         std::cerr << std::format("Assigning differential causality to {}\n",
                                  name);
         diffCausality();
@@ -593,8 +565,8 @@ private:
       // Now we need to make sure that the assigned causalities do not
       // already have an in Causality of Effort.
       if (isAssignedCausality(Causality::Flow, parentPortsAssigned)) {
-        const char *name = std::visit([](const auto &x) { return x->getName(); },
-                                      getComponentAt(myId));
+        const char *name = std::visit(
+            [](const auto &x) { return x->getName(); }, getComponentAt(myId));
         std::cerr << std::format("Assigning differential causality to {}\n",
                                  name);
         diffCausality();
@@ -1090,7 +1062,7 @@ private:
   // The vector of all the components in the graph -- it is closed not an open
   // variant
   std::vector<componentVariant> components;
-  // Adjacency list of the graph We keep this in addition to IDs in
+  // Adjacency list of the graph. We keep this in addition to IDs in
   // ports. This is done, because returning a view from variant is not
   // that easy. Can become possibly expensive, because of converting
   // view to a vector everytime.
@@ -1105,7 +1077,7 @@ static std::ostream &operator<<(std::ostream &os, BondGraph &g) {
   std::vector<size_t> sources;
   g.getSources(sources);
   // Then visit the graph and apply the print function to everything
-  auto visitor = [&os](auto &x) { os << x << "\n"; };
+  auto visitor = [&os](auto &x) { os << *x << "\n"; };
   g.dfs(sources, visitor);
   return os;
 }

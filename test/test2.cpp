@@ -1,6 +1,5 @@
 #include "BondGraph.hpp"
 #include "Component.hpp"
-#include "expression.hpp"
 #include <iostream>
 
 int main() {
@@ -69,6 +68,7 @@ int main() {
 
   // Now do causal analysis
   bg.assignCausality();
+  
   // Now produce the state space equations
   expressionAst ast = bg.generateStateSpace();
   const expression_t &res = l1.getStateEq(ast);
