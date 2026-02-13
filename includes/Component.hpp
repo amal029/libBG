@@ -12,6 +12,7 @@
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 struct Util {
@@ -129,7 +130,6 @@ template <ComponentType T> struct Component {
   constexpr void setDeleted() { deleted = true; }
   constexpr bool getDeleted() const { return deleted; }
   constexpr const std::string &getValue() const { return value; }
-  // constexpr std::string &&getValue() { return std::move(value); }
 
   constexpr void assignPortName() {
     if constexpr (T == ComponentType::SE) {
@@ -247,9 +247,8 @@ template <ComponentType T> struct Component {
     }
   }
 
-  constexpr void setAstIndex(size_t index) { ast_index = index; }
-  constexpr size_t getAstIndex() const { return ast_index; }
   constexpr void setInternalName(std::string &&s) { internal = std::move(s); }
+  constexpr const std::string &getInternalName() const { return internal; }
   constexpr std::string &getInternalName() { return internal; }
 
   // Get the state equation for the given component
@@ -259,7 +258,8 @@ template <ComponentType T> struct Component {
       const Port *p = getPort(0);
       std::vector<size_t> eqs = ast.getEQ();
       if (p->getOutCausality() == Causality::Flow) {
-        std::string ss = "d" + std::string(p->getOutCausalName());
+        // std::string ss = "d" + std::string(p->getOutCausalName());
+        const std::string &ss = getInternalName();
         return pr_getStateEq(ast, ss, eqs);
       } else {
         std::string_view ss = p->getInCausalName();
@@ -269,7 +269,8 @@ template <ComponentType T> struct Component {
       const Port *p = getPort(0);
       std::vector<size_t> eqs = ast.getEQ();
       if (p->getOutCausality() == Causality::Effort) {
-        std::string ss = "d" + std::string(p->getOutCausalName());
+        // std::string ss = "d" + std::string(p->getOutCausalName());
+        const std::string &ss = getInternalName();
         return pr_getStateEq(ast, ss, eqs);
       } else {
         std::string_view ss = p->getInCausalName();
@@ -313,10 +314,33 @@ private:
   const char *name;     // The user name of the component
   std::string internal; // For C and L type components
   size_t ID;        // The unique ID generated internally for each component
-  size_t ast_index;
   ComponentType myT;
   bool deleted = false;    // Has this been deleted from the graph
                            // during simplification.
+};
+
+// This is the variant with all the different components
+using componentVariant =
+    std::variant<Component<ComponentType::C> *, Component<ComponentType::L> *,
+                 Component<ComponentType::J0> *, Component<ComponentType::J1> *,
+                 Component<ComponentType::R> *, Component<ComponentType::SE> *,
+                 Component<ComponentType::SF> *, Component<ComponentType::GY> *,
+                 Component<ComponentType::TF> *>;
+
+// The hash required to make a map of Component pointers
+struct ComponentHash {
+  std::size_t operator()(const componentVariant component) const noexcept {
+    return std::hash<size_t>{}(
+        std::visit([](const auto &x) { return x->getID(); }, component));
+  }
+};
+
+struct ComponentEqual {
+  bool operator()(componentVariant lhs, componentVariant rhs) const noexcept {
+    size_t lname = std::visit([](const auto &x) { return x->getID(); }, lhs);
+    size_t rname = std::visit([](const auto &x) { return x->getID(); }, rhs);
+    return lname == rname;
+  }
 };
 
 // Printing the enum

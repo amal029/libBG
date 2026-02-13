@@ -24,14 +24,6 @@
 
 #define DEBUG_EXP(x) (std::cout << (x) << "\n")
 
-// This is the variant with all the different components
-using componentVariant =
-    std::variant<Component<ComponentType::C> *, Component<ComponentType::L> *,
-                 Component<ComponentType::J0> *, Component<ComponentType::J1> *,
-                 Component<ComponentType::R> *, Component<ComponentType::SE> *,
-                 Component<ComponentType::SF> *, Component<ComponentType::GY> *,
-                 Component<ComponentType::TF> *>;
-
 struct BondGraph {
   // Public methods
   BondGraph() {}
@@ -277,8 +269,8 @@ private:
       size_t div_index =
           space.append(Expression<EOP::DIV>(in_index, value_index));
       // inport->setOutExpression(div);
-      size_t rr = space.append(Expression<EOP::MUL>{div_index, 1});
-      size_t _ = space.append(Expression<EOP::EQ>{out_index, rr});
+      // size_t rr = space.append(Expression<EOP::MUL>{div_index, 1});
+      size_t _ = space.append(Expression<EOP::EQ>{out_index, div_index});
       return _;
     } else {
       out_index = space.append(Symbol{inport->getOutCausalName()});
@@ -296,9 +288,8 @@ private:
     Port *inport = x.getPort(0);
     const std::string &vstr = x.getValue();
     bool isIntegral = inport->getOutCausality() == Causality::Effort;
-    std::string internal = x.getInternalName();
-    size_t res = addToSpaceCL(space, inport, isIntegral, vstr, internal);
-    x.setAstIndex(res);
+    std::string &internal = x.getInternalName();
+    size_t _ = addToSpaceCL(space, inport, isIntegral, vstr, internal);
   }
   void addToSpace(expressionAst &space, Component<ComponentType::L> &x) const {
     assert(x.portSize() == 1);
@@ -306,8 +297,7 @@ private:
     const std::string &vstr = x.getValue();
     bool isIntegral = inport->getOutCausality() == Causality::Flow;
     std::string &internal = x.getInternalName();
-    size_t res = addToSpaceCL(space, inport, isIntegral, vstr, internal);
-    x.setAstIndex(res);
+    size_t _ = addToSpaceCL(space, inport, isIntegral, vstr, internal);
   }
 
   // This function is shared between TF/GY for building the state space.
@@ -358,7 +348,7 @@ private:
            (inport->getOutCausality() == Causality::Flow &&
             outport->getOutCausality() == Causality::Effort));
     size_t value_index = space.append(Symbol{x.getValue(), true});
-    x.setAstIndex(addToSpaceTFGY(space, inport, outport, value_index));
+    size_t _ = addToSpaceTFGY(space, inport, outport, value_index);
     OutputsEqualInputs(space, x);
   }
 
@@ -374,7 +364,7 @@ private:
            (inport->getOutCausality() == Causality::Flow &&
             outport->getOutCausality() == Causality::Flow));
     size_t value_index = space.append(Symbol{x.getValue(), true});
-    x.setAstIndex(addToSpaceTFGY(space, inport, outport, value_index));
+    size_t _ = addToSpaceTFGY(space, inport, outport, value_index);
     OutputsEqualInputs(space, x);
   }
   constexpr void addToSpaceJ0J1(expressionAst &space, Port *mainPort,
@@ -482,7 +472,6 @@ private:
     }
     size_t res = space.append(Symbol{inport->getOutCausalName()});
     res = space.append(Expression<EOP::EQ>{res, out});
-    x.setAstIndex(res);
   }
 
   // There the causality is that of the output port

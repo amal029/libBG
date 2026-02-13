@@ -1,3 +1,5 @@
+#pragma once
+
 #include <exception>
 #include <string>
 
@@ -79,5 +81,23 @@ private:
 
 public:
   explicit NotFound(const std::string &msg) : message(msg) {}
+  const char *what() const noexcept override { return message.c_str(); }
+};
+
+class IncorrectComponentType : public std::exception {
+private:
+  std::string message;
+
+public:
+  explicit IncorrectComponentType(const std::string &msg) : message(msg) {}
+  const char *what() const noexcept override { return message.c_str(); }
+};
+
+class DivideByZero : public std::exception {
+private:
+  std::string message;
+
+public:
+  explicit DivideByZero(const std::string &msg) : message(msg) {}
   const char *what() const noexcept override { return message.c_str(); }
 };

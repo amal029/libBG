@@ -11,6 +11,8 @@
 #include <string_view>
 #include <variant>
 #include <vector>
+#include "util.hpp"
+#include "exception.hpp"
 
 // This is enumeration of all
 enum class T : uint8_t { SYM = 0, NUM, ADD, MUL, DIV, SUB, EQ };
@@ -33,22 +35,36 @@ static void print_expression_t(std::ostream &os, const expression_t &in,
 
 struct Symbol {
   constexpr explicit Symbol(std::string_view n) : name(n) {}
-  constexpr explicit Symbol(std::string_view n, bool isC) : name(n), isConst(isC) {}
+  constexpr explicit Symbol(std::string_view n, bool isC)
+      : name(n), isConst(isC) {}
   Symbol(const Symbol &) = delete;
   Symbol(Symbol &&) = default;
   bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
-    // std::cout << "Checking symbol: " << name << " return: " << (!isConst) <<
-    // "\n";
     return (!isConst);
   }
+  template <typename T = double>
+  T eval(consts_t<T> &consts, consts_t<T> &vars, expressionAst &arena) const {
+    // Lookup the symbol inside the maps and return its value
+    if (consts.contains(name)) {
+      return consts[name];
+    } else if (vars.contains(name)) {
+      return vars[name];
+    } else {
+      throw NotFound(std::format("Value for {} not found\n", name));
+    }
+  }
+  bool hasDeriv(const expressionAst &) const { return name.starts_with('d'); }
   T getT() const { return t; }
   const std::string_view &getName() const { return name; }
   void print_expr(std::ostream &os, const expressionAst &ast) const {
-    os << getName();
+    if (!isConst)
+      os << name;
+    else
+      os << name.substr(0, name.find('_'));
   }
 
 private:
-  std::string_view name; // change this to string view?
+  std::string_view name;
   bool isConst = false;
   T t = T::SYM;
 };
@@ -60,6 +76,12 @@ struct Number {
   bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
     return false;
   }
+  template <typename T = double>
+  T eval(consts_t<T> &consts, consts_t<T> &vars,
+         const expressionAst &arena) const {
+    return static_cast<T>(num);
+  }
+  bool hasDeriv(const expressionAst &) const { return false; }
   T getT() const { return t; }
   double getNum() const { return num; }
   void print_expr(std::ostream &os, const expressionAst &ast) const {
@@ -124,6 +146,38 @@ template <EOP op> struct Expression {
     if (res)
       q.push(&right);
     return false;
+  }
+
+  // Now the evaulator for the expression
+  template <typename T = double>
+  T eval(consts_t<T> &consts, consts_t<T> &vars,
+         const expressionAst &ast) const {
+    T lval =
+        std::visit([&](const auto &x) { return x.eval(consts, vars, ast); },
+                   ast[getLeft()]);
+    T rval =
+        std::visit([&](const auto &x) { return x.eval(consts, vars, ast); },
+                   ast[getRight()]);
+
+    if constexpr (op == EOP::ADD) {
+      return lval + rval;
+    } else if constexpr (op == EOP::DIV) {
+      if (rval != 0) {
+        return lval / rval;
+      } else {
+        throw DivideByZero("Divide by zero error");
+      }
+    } else if constexpr (op == EOP::SUB) {
+      return lval - rval;
+    } else if constexpr (op == EOP::MUL) {
+      return lval * rval;
+    } else if constexpr (op == EOP::EQ) {
+      return ((lval - rval) == 0);
+    }
+  }
+
+  bool hasDeriv(const expressionAst &ast) const {
+    std::visit([&](const auto &x) { return x.hasDeriv(ast); }, ast[getRight()]);
   }
 
   Expression(const Expression &) = delete;
