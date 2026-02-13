@@ -8,7 +8,6 @@
 #include <variant>
 #include <vector>
 
-
 template <typename T>
 concept NumericType = std::integral<T> || std::floating_point<T>;
 
@@ -35,7 +34,7 @@ template <NumericType T = double> struct Solver {
     }
   }
 
-  std::vector<T> getSlope(component_map_t<T> &&initialValues, T time) {
+  component_map_t<T> getSlope(component_map_t<T> &&initialValues, T time) {
     consts_t<T> iValues;
     iValues.reserve(initialValues.size());
     _comps.reserve(initialValues.size());
@@ -66,7 +65,7 @@ template <NumericType T = double> struct Solver {
           std::visit([](const auto &x) { return x->getInternalName(); }, k);
       iValues[vv.substr(1)] = initialValues[k];
     }
-    std::vector<T> toret;
+    component_map_t<T> toret;
     toret.reserve(_comps.size());
     for (size_t counter = 0; counter < _comps.size(); ++counter) {
       if (!isDeriv[counter]) {
@@ -74,11 +73,10 @@ template <NumericType T = double> struct Solver {
         T res = std::visit(
             [&](const auto &x) { return x->eval(_consts, iValues, _ast); },
             _comps[counter]);
-        toret.emplace_back(res);
-
+        toret[_comps[counter]] = res;
       } else {
         // TODO: For this we first need to calculate the derivative and
-        // then integrate.
+        // then get the slope.
         throw NotYetImplemented(
             "Expressions with derivatives in expressions not yet implemented");
       }
