@@ -2,101 +2,108 @@
 #include "exception.hpp"
 #include "expression.hpp"
 #include "util.hpp"
-#include <iostream>
+#include <algorithm>
 #include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
 
-template <typename T>
-concept NumericType = std::integral<T> || std::floating_point<T>;
-
 template <typename V = double>
 using component_map_t =
     std::unordered_map<componentVariant, V, ComponentHash, ComponentEqual>;
 
+template <typename V = double>
+using storage_map_t =
+    std::unordered_map<storageVariant, V, StorageHash, StorageEqual>;
+
 template <NumericType T = double> struct Solver {
-  explicit Solver(const expressionAst &ast, component_map_t<T> &&consts)
-      : _ast(ast) {
+  explicit Solver(expressionAst &ast, component_map_t<T> &&consts,
+                  std::vector<storageVariant> &&comps)
+      : _ast(ast), _comps(std::move(comps)) {
+
+    // Now perform dependence analysis to order them correctly.
+    std::vector<bool> isDeriv = reorder(_comps);
+    bool res = std::any_of(isDeriv.begin(), isDeriv.end(),
+                           [](bool x) { return x == true; });
+    if (res) {
+      throw NotYetImplemented("DAEs not yet implemented");
+    }
 
     _consts.reserve(consts.size());
     // Convert the component -> value map to string -> value map
-    for (const auto &&[k, v] : consts) {
-      // First make sure that k is a storage component
-      ComponentType cT =
-          std::visit([](const auto &x) { return x->getType(); }, k);
-      if (cT != ComponentType::C || cT != ComponentType::L) {
-        throw IncorrectComponentType("Only storage elements evolve\n");
-      }
-      std::string &vv =
+    for (const auto &[k, v] : consts) {
+      // XXX: This should do small string optimisation
+      std::string vv =
           std::visit([](const auto &x) { return x->getValue(); }, k);
       _consts[vv] = std::move(v);
     }
+    // Here replace the constants with their values for all dxdt expressions
+    for (const storageVariant &_comp : _comps) {
+      const expression_t &ee = std::visit(
+          [&](auto &x) -> const expression_t & { return x->getStateEq(_ast); },
+          _comp);
+      Expression<EOP::EQ> *_ee =
+          (Expression<EOP::EQ> *)std::get_if<Expression<EOP::EQ>>(&ee);
+      assert(_ee != nullptr);
+      bool res = _ast.subs(_ee->getRight(), _consts);
+      if (res) {
+        // Then the right is guaranteed to be a symbol. Get the symbol from
+        // consts and get its value v.
+        const Symbol *torep = std::get_if<Symbol>(&_ast[_ee->getRight()]);
+        assert(torep != nullptr);
+        size_t nindex =
+            _ast.append(Number{_consts[std::string(torep->getName())]});
+        _ee->setRight(nindex); // replace the right with the new number
+      }
+    }
   }
 
-  component_map_t<T> getSlope(component_map_t<T> &&initialValues, T time) {
-    consts_t<T> iValues;
-    iValues.reserve(initialValues.size());
-    _comps.reserve(initialValues.size());
+  Solver(const Solver &) = delete;
+  Solver(Solver &&) = default;
+  Solver &operator=(const Solver &) = delete;
+  Solver &operator=(Solver &&) = default;
 
-    // First perform dependence analysis
-    for (auto &kv : initialValues) {
-      _comps.emplace_back(kv.first);
-    }
-    // Now perform dependence analysis to order them correctly.
-    std::vector<bool> isDeriv = reorder(_comps);
+  void dxdt(storage_map_t<T> &&xT, storage_map_t<T> &dxdt) {
+    consts_t<T> iValues;
+    iValues.reserve(xT.size());
 
     // First turn the initial values from
     // Component:v --> string:v
-    for (const componentVariant k : _comps) {
-      // First make sure that k is a storage component
-      ComponentType cT =
-          std::visit([](const auto &x) { return x->getType(); }, k);
-      if (cT != ComponentType::C || cT != ComponentType::L) {
-        std::visit(
-            [&](const auto &x) {
-              std::cerr << *x;
-              std::cerr << "\n";
-            },
-            k);
-        throw IncorrectComponentType("Only storage elements evolve\n");
-      }
-      std::string_view vv =
-          std::visit([](const auto &x) { return x->getInternalName(); }, k);
-      iValues[vv.substr(1)] = initialValues[k];
+    for (const storageVariant &k : _comps) {
+      std::string vv = std::visit(
+          [](const auto &x) { return x->getInternalName().substr(1); }, k);
+      iValues[vv] = std::move(xT[k]);
     }
-    component_map_t<T> toret;
-    toret.reserve(_comps.size());
+    dxdt.reserve(_comps.size());
     for (size_t counter = 0; counter < _comps.size(); ++counter) {
-      if (!isDeriv[counter]) {
-        // Then just get the slope/value
-        T res = std::visit(
-            [&](const auto &x) { return x->eval(_consts, iValues, _ast); },
-            _comps[counter]);
-        toret[_comps[counter]] = res;
-      } else {
-        // TODO: For this we first need to calculate the derivative and
-        // then get the slope.
-        throw NotYetImplemented(
-            "Expressions with derivatives in expressions not yet implemented");
-      }
+      // Then just get the slope/value
+      T res = std::visit(
+          [&](const auto &x) {
+            const expression_t &ee = x->getStateEq(_ast);
+            const Expression<EOP::EQ> *_ee =
+                std::get_if<Expression<EOP::EQ>>(&ee);
+            return eval(_ee->getRight(), iValues, _ast);
+          },
+          _comps[counter]);
+      dxdt[_comps[counter]] = res;
     }
-    return toret;
   }
 
 private:
   // XXX: Reorder so that all the equations that need derivatives come
   // last.
   [[nodiscard]]
-  std::vector<bool> reorder(std::vector<componentVariant> &_comps,
-                            const component_map_t<T> &iValues) {
+  std::vector<bool> reorder(std::vector<storageVariant> &_comps) {
     std::vector<bool> toret;
     toret.resize(_comps.size(), false);
     size_t i = 0;
     size_t j = _comps.size() - 1;
     while (i != j || i != _comps.size() - 1) {
       const expression_t &exp = std::visit(
-          [&](const auto &x) { x->getStateEq(_ast); }, iValues[_comps[i]]);
+          [&](const auto &x) -> const expression_t & {
+            return x->getStateEq(_ast);
+          },
+          _comps[i]);
       // Does this exp have a derivative on the right?
       bool res = std::visit(
           [&](const auto &x) -> bool { return x.hasDeriv(_ast); }, exp);
@@ -112,6 +119,6 @@ private:
   }
 
   consts_t<T> _consts;
-  const expressionAst &_ast;
-  std::vector<componentVariant> _comps;
+  expressionAst &_ast;
+  std::vector<storageVariant> _comps;
 };

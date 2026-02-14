@@ -343,6 +343,27 @@ struct ComponentEqual {
   }
 };
 
+// This is the variant with all the different components
+using storageVariant =
+    std::variant<Component<ComponentType::C> *, Component<ComponentType::L> *>;
+
+// The hash required to make a map of Component pointers
+struct StorageHash {
+  std::size_t operator()(const storageVariant component) const noexcept {
+    return std::hash<size_t>{}(
+        std::visit([](const auto &x) { return x->getID(); }, component));
+  }
+};
+
+struct StorageEqual {
+  bool operator()(storageVariant lhs, storageVariant rhs) const noexcept {
+    size_t lname = std::visit([](const auto &x) { return x->getID(); }, lhs);
+    size_t rname = std::visit([](const auto &x) { return x->getID(); }, rhs);
+    return lname == rname;
+  }
+};
+
+
 // Printing the enum
 static std::ostream &operator<<(std::ostream &os, const ComponentType &c) {
   switch (c) {

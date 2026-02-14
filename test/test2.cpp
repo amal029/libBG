@@ -1,6 +1,18 @@
 #include "BondGraph.hpp"
 #include "Component.hpp"
 #include <iostream>
+#include <unordered_map>
+#include <variant>
+#include <vector>
+#include "Solver.hpp"
+#include "expression.hpp"
+
+void print_state_eqns(const expression_t &res, const char *name,
+                      expressionAst &ast) {
+  std::cout << std::format("State eq {}: ", name);
+  print_expression_t(std::cout, res, ast);
+  std::cout << "\n";
+}
 
 int main() {
   Component<ComponentType::SE> se{"se"};
@@ -19,6 +31,11 @@ int main() {
   Component<ComponentType::L> l2{"l2"};
   Component<ComponentType::R> r2{"r2"};
   Component<ComponentType::TF> tf{"tf"};
+
+  // This is the capacitance junction
+  Component<ComponentType::J0> v2{"v2"};
+  Component<ComponentType::C> c{"c"};
+
   Component<ComponentType::J1> v1{"v1"};
   Component<ComponentType::SE> se2{"se2"};
   Component<ComponentType::L> l3{"l3"};
@@ -40,6 +57,10 @@ int main() {
   bg.addComponent(&l2);
   bg.addComponent(&r2);
   bg.addComponent(&tf);
+  // Add the extra components
+  bg.addComponent(&v2);
+  bg.addComponent(&c);
+
   bg.addComponent(&v1);
   bg.addComponent(&se2);
   bg.addComponent(&l3);
@@ -59,30 +80,65 @@ int main() {
   bg.connect(o, l2);
   bg.connect(o, r2);
   bg.connect(o, tf);
-  bg.connect(tf, v1);
-  bg.connect(v1, l3);
+
+  bg.connect(tf, v2);
+  bg.connect(v2, c);
+  bg.connect(v2, v1);
   bg.connect(se2, v1);
+  bg.connect(v1, l3);
+
+  // Modify these
+  // bg.connect(tf, v1);
+  // bg.connect(v1, l3);
+  // bg.connect(se2, v1);
 
   // Try simplifying this graph
   bg.simplify(); // works fine.
 
   // Now do causal analysis
   bg.assignCausality();
-  
+
   // Now produce the state space equations
   expressionAst ast = bg.generateStateSpace();
   const expression_t &res = l1.getStateEq(ast);
-  std::cout << std::format("State eq l1: ");
-  print_expression_t(std::cout, res, ast);
-  std::cout << "\n";
-
   const expression_t &res2 = l2.getStateEq(ast);
-  std::cout << std::format("State eq l2: ");
-  print_expression_t(std::cout, res2, ast);
-  std::cout << "\n";
-
+  const expression_t &resc = c.getStateEq(ast);
   const expression_t &res3 = l3.getStateEq(ast);
-  std::cout << std::format("State eq l3: ");  
-  print_expression_t(std::cout, res3, ast);
-  std::cout << "\n";
+
+  print_state_eqns(res, "l1", ast);
+  print_state_eqns(res2, "l2", ast);
+  print_state_eqns(resc, "C", ast);
+  print_state_eqns(res3, "l3", ast);
+
+  // Get the slope of a given state equation
+  // Make the consts first
+  component_map_t<double> consts;
+  consts[&se] = 1.0;
+  consts[&r] = 100;
+  consts[&l1] = 2;
+  consts[&gy] = 20;
+  consts[&l2] = 2;
+  consts[&r2] = 10;
+  consts[&tf] = -2;
+  consts[&c] = 2;
+  consts[&se2] = -2;
+  consts[&l3] = 2;
+  std::vector<storageVariant> storageComponents{&l1, &l2, &c, &l3};
+  Solver<double> s{ast, std::move(consts), std::move(storageComponents)};
+  // Print the things again
+  print_state_eqns(res, "l1", ast);
+  print_state_eqns(res2, "l2", ast);
+  print_state_eqns(resc, "C", ast);
+  print_state_eqns(res3, "l3", ast);
+  
+  // Now get the slope
+  storage_map_t<double> initialValues{{&l1, 0}, {&l2, 1}, {&c, 2}, {&l3, 10}};
+  storage_map_t<double> result;
+  s.dxdt(std::move(initialValues), result);
+  std::cout << "DxDt\n";
+  for (const auto &[k, v] : result) {
+    const char *name =
+        std::visit([](auto const &x) { return x->getName(); }, k);
+    std::cout << name << ": " << v << "\n";
+  }
 }
