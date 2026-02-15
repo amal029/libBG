@@ -29,7 +29,7 @@
     3. Generation of symbolic state space equations as ODEs and DAEs.
     4. Numerical simulation of the generated state space equations.
        
-** TODO
+** Still to be done.
   - GUI input for building the model
   - Generation of block diagrams for Simulink
   - Consumption of block diagrams from Simulink
