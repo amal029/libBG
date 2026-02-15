@@ -35,7 +35,7 @@ static void print_expression_t(std::ostream &os, const expression_t &in,
                                const expressionAst &ast);
 
 struct Number {
-  Number(double n) : num(n) {}
+  constexpr explicit Number(double n) : num(n) {}
   Number(const Number &) = delete;
   Number(Number &&) = default;
   bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
@@ -125,7 +125,7 @@ static std::ostream &operator<<(std::ostream &os, const T t) {
 }
 
 template <EOP op> struct Expression {
-  constexpr Expression(size_t l, size_t r) : left(l), right(r) {
+  constexpr explicit Expression(size_t l, size_t r) : left(l), right(r) {
     if constexpr (op == EOP::ADD) {
       t = T::ADD;
     } else if constexpr (op == EOP::DIV) {

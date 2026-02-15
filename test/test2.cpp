@@ -1,5 +1,6 @@
 #include "BondGraph.hpp"
 #include "Component.hpp"
+#include <cstddef>
 #include <iostream>
 #include <unordered_map>
 #include <variant>
@@ -114,31 +115,32 @@ int main() {
   // Make the consts first
   component_map_t<double> consts;
   consts[&se] = 1.0;
-  consts[&r] = 100;
+  consts[&r] = 1;
   consts[&l1] = 2;
-  consts[&gy] = 20;
+  consts[&gy] = 2;
   consts[&l2] = 2;
-  consts[&r2] = 10;
+  consts[&r2] = 1;
   consts[&tf] = -2;
   consts[&c] = 2;
   consts[&se2] = -2;
   consts[&l3] = 2;
   std::vector<storageVariant> storageComponents{&l1, &l2, &c, &l3};
-  Solver<double> s{ast, std::move(consts), std::move(storageComponents)};
+  std::vector<double> initValues{0, 1, 2, 10};
+  Solver<double> s{ast, std::move(consts), storageComponents};
   // Print the things again
   print_state_eqns(res, "l1", ast);
   print_state_eqns(res2, "l2", ast);
   print_state_eqns(resc, "C", ast);
   print_state_eqns(res3, "l3", ast);
-  
-  // Now get the slope
-  storage_map_t<double> initialValues{{&l1, 0}, {&l2, 1}, {&c, 2}, {&l3, 10}};
-  storage_map_t<double> result;
-  s.dxdt(std::move(initialValues), result);
+
+  // IMPORTANT: Note that the initValues and result will be in order
+  // declared for storageComponents above.
+  std::vector<double> result;
+  s.dxdt(initValues, result);
   std::cout << "DxDt\n";
-  for (const auto &[k, v] : result) {
-    const char *name =
-        std::visit([](auto const &x) { return x->getName(); }, k);
-    std::cout << name << ": " << v << "\n";
+  for (size_t counter = 0; counter < storageComponents.size(); ++counter) {
+    const char *name = std::visit([](auto const &x) { return x->getName(); },
+                                  storageComponents[counter]);
+    std::cout << name << ": " << result[counter] << "\n";
   }
 }

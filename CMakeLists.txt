@@ -14,6 +14,12 @@ set(CMAKE_CXX_STANDARD 23)
 # For lsp language server
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# The include directory
+set(INCLUDES src/includes)
+
+# The compiler options
+set (CXX_FLAGS -O3 -Wall -Werror -Wpedantic -Wextra -Wno-unused-parameter -Wno-unused-function)
+
 # Add ex1.cpp file of the project root directory as a source file
 # set(SOURCE_FILES ../test/test1.cpp)
 
@@ -22,11 +28,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_executable(test1 ../test/test1.cpp)
 
 # The include directory
-# target_include_directories(test1 PRIVATE includes ${GINAC_INCLUDE_DIRS})
-target_include_directories(test1 PRIVATE includes)
+# target_include_directories(test1 PRIVATE ${INCLUDES} ${GINAC_INCLUDE_DIRS})
+target_include_directories(test1 PRIVATE ${INCLUDES})
 
-target_compile_options(test1 PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
-			    -Wno-unused-parameter -Wno-unused-function)
+target_compile_options(test1 PRIVATE ${CXX_FLAGS})
 # target_link_directories(test1 PRIVATE ${GINAC_LIBRARY_DIRS})
 # target_link_libraries(test1 PRIVATE ${GINAC_LIBRARIES})
 
@@ -36,23 +41,21 @@ target_compile_options(test1 PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
 add_executable(test2 ../test/test2.cpp)
 
 # The include directory
-target_include_directories(test2 PRIVATE includes)
+target_include_directories(test2 PRIVATE ${INCLUDES})
 
-target_compile_options(test2 PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
-			    -Wno-unused-parameter -Wno-unused-function)
+target_compile_options(test2 PRIVATE ${CXX_FLAGS})
 # target_link_directories(test2 PRIVATE ${GINAC_LIBRARY_DIRS})
 # target_link_libraries(test2 PRIVATE ${GINAC_LIBRARIES})
 
 #----------------------- Example 1---------------------
 # Add executable target with source files listed in SOURCE_FILES variable
-add_executable(ex1 ../src/ex1.cpp)
+add_executable(ex1 ../test/ex1.cpp)
 
 # The include directory
-# target_include_directories(ex1 PRIVATE includes ${GINAC_INCLUDE_DIRS})
-target_include_directories(ex1 PRIVATE includes)
+# target_include_directories(ex1 PRIVATE ${INCLUDES} ${GINAC_INCLUDE_DIRS})
+target_include_directories(ex1 PRIVATE ${INCLUDES})
 
-target_compile_options(ex1 PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
-			    -Wno-unused-parameter -Wno-unused-function)
+target_compile_options(ex1 PRIVATE ${CXX_FLAGS})
 # target_link_directories(ex1 PRIVATE ${GINAC_LIBRARY_DIRS})
 # target_link_libraries(ex1 PRIVATE ${GINAC_LIBRARIES})
 
@@ -60,9 +63,7 @@ target_compile_options(ex1 PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
 add_executable(testexp ../test/testexp.cpp)
 
 # The include directory
-# target_include_directories(testexp PRIVATE includes ${GINAC_INCLUDE_DIRS})
-target_include_directories(testexp PRIVATE includes)
-
-target_compile_options(testexp PRIVATE -O3 -Wall -Werror -Wpedantic -Wextra
-			    -Wno-unused-parameter -Wno-unused-function)
+# target_include_directories(testexp PRIVATE ${INCLUDES} ${GINAC_INCLUDE_DIRS})
+target_include_directories(testexp PRIVATE ${INCLUDES})
+target_compile_options(testexp PRIVATE ${CXX_FLAGS})
 

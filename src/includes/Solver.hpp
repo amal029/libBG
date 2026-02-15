@@ -3,6 +3,7 @@
 #include "expression.hpp"
 #include "util.hpp"
 #include <algorithm>
+#include <iostream>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -18,8 +19,8 @@ using storage_map_t =
 
 template <NumericType T = double> struct Solver {
   explicit Solver(expressionAst &ast, component_map_t<T> &&consts,
-                  std::vector<storageVariant> &&comps)
-      : _ast(ast), _comps(std::move(comps)) {
+                  const std::vector<storageVariant> &comps)
+      : _ast(ast), _comps(comps) {
 
     // Now perform dependence analysis to order them correctly.
     std::vector<bool> isDeriv = reorder(_comps);
@@ -28,7 +29,7 @@ template <NumericType T = double> struct Solver {
     if (res) {
       throw NotYetImplemented("DAEs not yet implemented");
     }
-
+    consts_t<T> _consts;
     _consts.reserve(consts.size());
     // Convert the component -> value map to string -> value map
     for (const auto &[k, v] : consts) {
@@ -63,16 +64,14 @@ template <NumericType T = double> struct Solver {
   Solver &operator=(const Solver &) = delete;
   Solver &operator=(Solver &&) = default;
 
-  void dxdt(storage_map_t<T> &&xT, storage_map_t<T> &dxdt) {
-    consts_t<T> iValues;
-    iValues.reserve(xT.size());
-
+  constexpr void dxdt(const std::vector<T> &xT, std::vector<T> &dxdt) {
     // First turn the initial values from
     // Component:v --> string:v
-    for (const storageVariant &k : _comps) {
+    for (size_t counter = 0; counter < _comps.size(); ++counter) {
       std::string vv = std::visit(
-          [](const auto &x) { return x->getInternalName().substr(1); }, k);
-      iValues[vv] = std::move(xT[k]);
+          [](const auto &x) { return x->getInternalName().substr(1); },
+          _comps[counter]);
+      iValues[vv] = xT[counter];
     }
     dxdt.reserve(_comps.size());
     for (size_t counter = 0; counter < _comps.size(); ++counter) {
@@ -82,10 +81,10 @@ template <NumericType T = double> struct Solver {
             const expression_t &ee = x->getStateEq(_ast);
             const Expression<EOP::EQ> *_ee =
                 std::get_if<Expression<EOP::EQ>>(&ee);
-            return eval(_ee->getRight(), iValues, _ast);
+            return eval(_ast[_ee->getRight()], iValues, _ast);
           },
           _comps[counter]);
-      dxdt[_comps[counter]] = res;
+      dxdt[counter] = res;
     }
   }
 
@@ -118,7 +117,7 @@ private:
     return toret;
   }
 
-  consts_t<T> _consts;
+  consts_t<T> iValues;
   expressionAst &_ast;
   std::vector<storageVariant> _comps;
 };
