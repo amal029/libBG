@@ -4,10 +4,12 @@
 #include "expression.hpp"
 #include "rkf45.hpp"
 #include <cfloat>
+#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -22,13 +24,11 @@ void print_state_eqns(const expression_t &res, const char *name,
 Solver<double> *gs = nullptr;
 std::vector<double> xv;
 
+// We need this function signature, because the library demands it.
 void toIntegrate(double t, double x[], double dxdt[]) {
 
-  std::vector<double> res;                            // overhead
-  gs->dxdt(xv, res);                                  // getting the derivative
-  std::memmove(dxdt, res.data(),
-               gs->getComponentSize() *
-                   sizeof(double)); // getting the result back
+  std::span<double> ptr(dxdt, gs->getComponentSize());
+  gs->dxdt(xv, ptr); // getting the derivative
 }
 
 // Integrator for the system

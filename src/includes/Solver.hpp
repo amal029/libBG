@@ -3,6 +3,7 @@
 #include "expression.hpp"
 #include "util.hpp"
 #include <algorithm>
+#include <span>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -63,7 +64,7 @@ template <NumericType T = double> struct Solver {
 
   constexpr size_t getComponentSize() const { return _comps.size(); }
 
-  constexpr void dxdt(const std::vector<T> &xT, std::vector<T> &dxdt) {
+  constexpr void dxdt(const std::vector<T> &xT, std::span<T> dxdt) {
     // First turn the initial values from
     // Component:v --> string:v
     for (size_t counter = 0; counter < _comps.size(); ++counter) {
@@ -72,7 +73,7 @@ template <NumericType T = double> struct Solver {
           _comps[counter]);
       iValues[vv] = xT[counter];
     }
-    dxdt.reserve(_comps.size());
+    // dxdt.reserve(_comps.size());
     for (size_t counter = 0; counter < _comps.size(); ++counter) {
       // Then just get the slope/value
       T res = std::visit(

@@ -159,15 +159,11 @@
       // Use global variables for making things more efficient.
       Solver<double> *gs = nullptr;
       std::vector<double> xv;
-
-      // The main function computing the slope
+      // We need this function signature, because the library demands it.
       void toIntegrate(double t, double x[], double dxdt[]) {
 
-        size_t N = gs->getComponentSize(); // number of equations
-        std::memmove(xv.data(), x, N * sizeof(double)); // moving from array to vector
-        std::vector<double> res;                            
-        gs->dxdt(xv, res);                                  // getting the derivative via solver.
-        std::memmove(dxdt, res.data(), N * sizeof(double)); // getting the result back into array
+        std::span<double> ptr(dxdt, gs->getComponentSize());
+        gs->dxdt(xv, ptr); // getting the derivative
       }
 
       // Integrator for the system
@@ -175,42 +171,45 @@
         gs = &s; // Set the global Solver
         int neqn = s.getComponentSize();
         // Reserve enough space in input
-        xv.reserve(neqn);		// number of equations
+        xv.reserve(neqn);
 
         // This is heap allocated to avoid VLA
-        double *Y = new double[neqn];
         double *YP = new double[neqn];
         double t = 0; // The current value of time.
-        double tout = 50;		// how many seconds
-        double abserr = sqrt(DBL_EPSILON); // abs errors for rk45
-        double relerr = sqrt(DBL_EPSILON); // relative errors for rk45
-        int FLAG = 0;		     // API for rk45 call
+        double tout = 50;
+        double abserr = sqrt(DBL_EPSILON);
+        double relerr = sqrt(DBL_EPSILON);
+        int FLAG = -1;
 
-        // Initial values for integrating the state space equations
-        Y[0] = 0; Y[1] = 1; Y[2] = 2; Y[3] = 10;
+        // Initial values
+        xv.push_back(0);
+        xv.push_back(1);
+        xv.push_back(2);
+        xv.push_back(10);
 
         // Write the result to a file
         std::ofstream file("/tmp/test2.csv");
+        assert(file.is_open());
         // First write the very first line
         // The header
         file << "Time(sec), L1, L2, C, L3" << "\n";
-        file << t << "," << Y[0] << "," << Y[1] << "," << Y[2] << "," << Y[3] << "\n";
+        file << t << "," << xv[0] << "," << xv[1] << "," << xv[2] << "," << xv[3] << "\n";
         // Call the integrator -- one step mode
-        while (FLAG != 2) {		// FLAG = 2 at end of time 50 seconds.
-          // Call the rk45 solver.
-          FLAG = r8_rkf45(toIntegrate, neqn, Y, YP, &t, tout, &relerr, abserr, -1);
-          // Write the output after each integration step
-          file << t << ", " << Y[0] << "," << Y[1] << "," << Y[2] << "," << Y[3]
+        while (FLAG != 2) {
+          FLAG = r8_rkf45(toIntegrate, neqn, xv.data(), YP, &t, tout, &relerr, abserr,
+                          -1);
+          file << t << ", " << xv[0] << "," << xv[1] << "," << xv[2] << "," << xv[3]
                << "\n";
         }
-        file.close();			// close the file
-        delete[] Y;			// delete the allocated arrays
+
+        file.close();
+
         delete[] YP;
       }
 
       int main() {
         // .....same code as before....define components, etc...
-        
+              
         // Try simplifying this graph
         bg.simplify(); // works fine.
 
