@@ -3,7 +3,6 @@
 #include "expression.hpp"
 #include "util.hpp"
 #include <algorithm>
-// #include <iostream>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -62,9 +61,7 @@ template <NumericType T = double> struct Solver {
   Solver &operator=(const Solver &) = delete;
   Solver &operator=(Solver &&) = default;
 
-  constexpr size_t getComponentSize() const {
-    return _comps.size();
-  }
+  constexpr size_t getComponentSize() const { return _comps.size(); }
 
   constexpr void dxdt(const std::vector<T> &xT, std::vector<T> &dxdt) {
     // First turn the initial values from
@@ -91,8 +88,6 @@ template <NumericType T = double> struct Solver {
   }
 
 private:
-  // XXX: Reorder so that all the equations that need derivatives come
-  // last.
   [[nodiscard]]
   bool isDAE(const std::vector<storageVariant> &_comps) {
     bool toret = false;

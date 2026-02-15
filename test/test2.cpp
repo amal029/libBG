@@ -6,8 +6,8 @@
 #include <cfloat>
 #include <cstddef>
 #include <cstring>
+#include <fstream>
 #include <iostream>
-#include <semaphore>
 #include <unordered_map>
 #include <vector>
 
@@ -25,23 +25,24 @@ std::vector<double> xv;
 void toIntegrate(double t, double x[], double dxdt[]) {
 
   size_t N = gs->getComponentSize();
-  memmove(xv.data(), x, N * sizeof(double));
+  std::memmove(xv.data(), x, N * sizeof(double));
   std::vector<double> res;                            // overhead
   gs->dxdt(xv, res);                                  // getting the derivative
   std::memmove(dxdt, res.data(), N * sizeof(double)); // getting the result back
 }
 
-// Declare the function that will be called by the integrator
+// Integrator for the system
 void integrate(Solver<double> &s) {
   gs = &s; // Set the global Solver
   int neqn = s.getComponentSize();
   // Reserve enough space in input
   xv.reserve(neqn);
 
+  // This is heap allocated to avoid VLA
   double *Y = new double[neqn];
   double *YP = new double[neqn];
   double t = 0; // The current value of time.
-  double tout = 1;
+  double tout = 50;
   double abserr = sqrt(DBL_EPSILON);
   double relerr = sqrt(DBL_EPSILON);
   int FLAG = -1;
@@ -52,16 +53,21 @@ void integrate(Solver<double> &s) {
   Y[2] = 2;
   Y[3] = 10;
 
+  // Write the result to a file
+  std::ofstream file("/tmp/test2.csv");
+  assert(file.is_open());
+  // First write the very first line
+  // The header
+  file << "Time(sec), L1, L2, C, L3" << "\n";
+  file << t << "," << Y[0] << "," << Y[1] << "," << Y[2] << "," << Y[3] << "\n";
   // Call the integrator -- one step mode
   while (FLAG != 2) {
     FLAG = r8_rkf45(toIntegrate, neqn, Y, YP, &t, tout, &relerr, abserr, -1);
-    std::cout << t << ": ";
-    std::cout << "[";
-    for (size_t i = 0; i < (size_t)neqn; ++i) {
-      std::cout << Y[i] << " ";
-    }
-    std::cout << "]\n";
+    file << t << ", " << Y[0] << "," << Y[1] << "," << Y[2] << "," << Y[3]
+         << "\n";
   }
+
+  file.close();
 
   delete[] Y;
   delete[] YP;
