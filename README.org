@@ -1,0 +1,258 @@
+* Bond graphs
+  Bond graphs are a domain-independent graphical description of dynamic
+  behaviour of physical systems. This means that systems from different
+  domains (cf. electrical, mechanical, hydraulic, acoustical,
+  thermodynamic, material) are described in the same way. (c.f.
+  [[https://web.mat.upc.edu/carles.batlle/MOSS/broenink.pdf][Broenink]]).
+
+  This is the (in development) library for modelling and simulation of
+  domain independent simulation of physical systems.
+
+  *Need for such a library*: We need such a library for mixed simulation
+   of different systems. In particular simulation of classical physical
+   systems together with neural networks. In particular Spiking Neural
+   networks ([[https://rockpool.ai/basics/introduction_to_snns.html][SNN LIF]]). By combining classical continuos systems with
+   SNNs we can develop complex simulations for developing AI control
+   techniques. More importantly, this library (will) allow the /reverse
+   engineering/ of SNNs back into efficient and semantics preserving
+   electrical circuits, which can be then implemented as CMOS chips.
+
+* Current functionality in libBG library:
+  - This, is a header only, library developed in C++-23 for efficiency
+    purposes.
+  - The library supports developing bond graphs directly using the C++
+    API calls.
+  - The library takes as input a bond graph built using the C++ API
+    calls and then performs:
+    1. Simplification
+    2. Causality analysis
+    3. Generation of symbolic state space equations as ODEs and DAEs.
+    4. Numerical simulation of the generated state space equations.
+       
+** TODO
+  - GUI input for building the model
+  - Generation of block diagrams for Simulink
+  - Consumption of block diagrams from Simulink
+  - Modelling of switching components (e.g., transistor) for modelling
+    and simulation of hybrid systems.
+
+* Quick example
+  Consider modelling a hoisting device. This is an electromechanical
+  system consisting of both electrical and mechanical components. The
+  figure of the system is shown below:
+  #+CAPTION: Model of an ideal hoisting device
+  #+NAME: fig:hoist
+  #+ATTR_HTML: :width 800
+  [[file:figs/model.png]]
+
+  The equivalent bond graph of the hoisting device in [[fig:hoist]] is shown
+  in [[fig:bg]]:
+  #+CAPTION: Bond graph model of the hoisting device
+  #+ATTR_ORG: :width 400
+  #+ATTR_HTML: :width 800
+  #+NAME: fig:bg
+  [[file:figs/BG.png]]
+
+  - The above bond graph can be encoded using the library as shown below.
+
+  #+NAME: bg-src
+  #+CAPTION: libBG C++ source to capture the hoisting device.
+  #+begin_src c++
+    #include "BondGraph.hpp"	// Class for creating the bond graph
+    #include "Component.hpp"	// Class for creating the components of the bond graph
+    #include "Solver.hpp"		// Class computing the state space equations
+    #include "expression.hpp"	// The symbolic represetation of the state space equations
+    #include "rkf45.hpp"		// Third party rk45 solver
+    #include <cfloat>		// Used to compute the absolute and relative error
+    #include <cstddef>
+    #include <cstring>
+    #include <fstream>
+    #include <iostream>
+    #include <unordered_map>
+    #include <vector>
+
+    void print_state_eqns(const expression_t &res, const char *name,
+    		      expressionAst &ast) {
+      std::cout << std::format("State eq {}: ", name);
+      print_expression_t(std::cout, res, ast);
+      std::cout << "\n";
+    }
+
+    int main() {
+      // Declare the components in the bond graph
+      Component<ComponentType::SE> se{"se"}; Component<ComponentType::J0> u0{"u0"};
+      Component<ComponentType::J1> j1{"j1"}; Component<ComponentType::J0> u12{"u12"};
+      Component<ComponentType::R> r{"r"}; Component<ComponentType::J0> u2{"u2"};
+      Component<ComponentType::J1> j2{"j2"}; Component<ComponentType::J0> u23{"u23"};
+      Component<ComponentType::L> l1{"l1"}; Component<ComponentType::J0> u3{"u3"};
+      Component<ComponentType::GY> gy{"gy"}; Component<ComponentType::J1> o{"o"};
+      Component<ComponentType::L> l2{"l2"}; Component<ComponentType::R> r2{"r2"};
+      Component<ComponentType::TF> tf{"tf"}; Component<ComponentType::J0> v2{"v2"};
+      Component<ComponentType::C> c{"c"}; Component<ComponentType::J1> v1{"v1"};
+      Component<ComponentType::SE> se2{"se2"}; Component<ComponentType::L> l3{"l3"};
+
+      // Now add these to the bondgraph
+      BondGraph bg;
+      bg.addComponent(&se); bg.addComponent(&u0); bg.addComponent(&j1); bg.addComponent(&u12);
+      bg.addComponent(&r); bg.addComponent(&u2); bg.addComponent(&j2); bg.addComponent(&u23);
+      bg.addComponent(&l1); bg.addComponent(&u3); bg.addComponent(&gy); bg.addComponent(&o);
+      bg.addComponent(&l2); bg.addComponent(&r2); bg.addComponent(&tf); bg.addComponent(&v2);
+      bg.addComponent(&c); bg.addComponent(&v1); bg.addComponent(&se2); bg.addComponent(&l3);
+
+      // Now connect components
+      bg.connect(se, u0); bg.connect(u0, j1); bg.connect(j1, u12); bg.connect(u12, r);
+      bg.connect(j1, u2); bg.connect(u2, j2); bg.connect(j2, u23); bg.connect(u23, l1);
+      bg.connect(j2, u3); bg.connect(u3, gy); bg.connect(gy, o); bg.connect(o, l2);
+      bg.connect(o, r2); bg.connect(o, tf); bg.connect(tf, v2); bg.connect(v2, c);
+      bg.connect(v2, v1); bg.connect(se2, v1); bg.connect(v1, l3);
+
+      // Try simplifying this graph
+      bg.simplify();
+
+      // Now do causal analysis
+      bg.assignCausality();
+
+      // Now produce the state space equations
+      expressionAst ast = bg.generateStateSpace();
+      const expression_t &res = l1.getStateEq(ast);
+      const expression_t &res2 = l2.getStateEq(ast);
+      const expression_t &resc = c.getStateEq(ast);
+      const expression_t &res3 = l3.getStateEq(ast);
+
+      print_state_eqns(res, "l1", ast);
+      print_state_eqns(res2, "l2", ast);
+      print_state_eqns(resc, "C", ast);
+      print_state_eqns(res3, "l3", ast);
+    }
+
+  #+end_src
+
+  - The above code can be compiled using cmake as follows
+    #+begin_src bash
+      cd libBG 			# where you pulled from github
+      mkdir -p build		# Make a build directory
+      cd build && cmake ..  	# build using cmake
+      make			# compile the library and examples
+      ./test2 			# run the above program
+    #+end_src
+  - The output you should get the following output
+    #+NAME: output
+    #+begin_src bash
+      State eq l1: df_8 = ((((0 + (-1 * (f_12 * gy_10))) + se_0) + (-1 * (f_8 * r_4))) / l1_8)
+      State eq l2: df_12 = ((((0 + (f_8 * gy_10)) + (-1 * (f_12 * r2_13))) + (-1 * (e_16 * tf_14))) / l2_12)
+      State eq C: de_16 = (((0 + (f_12 * tf_14)) + (-1 * f_19)) / c_16)
+      State eq l3: df_19 = (((0 + e_16) + se2_18) / l3_19)
+    #+end_src
+  - The output are the state space equations for each of the storage
+    elements -- three inductors and 1 capacitor (capacitor modelling the
+    elasticity of the rope not shown in the bond graph, c.f. [[https://web.mat.upc.edu/carles.batlle/MOSS/broenink.pdf][Broenink]]).
+  - These state space equations can be simulated using the ~Solver.hpp~
+    class along with any third-party integrator.
+  - For a non-stiff system with just ODEs, like the above, a simple RK45
+    solver would suffice.
+  - We use the [[https://people.sc.fsu.edu/~jburkardt/cpp_src/rkf45/rkf45.html][RK45]] integrator along with the ~Solver~ class that
+    computes the state space equations given the constants (e.g., gy_10)
+    and the initial values as shown below:
+    #+CAPTION: Integrating the ODEs
+    #+begin_src c++
+
+      // Use global variables for making things more efficient.
+      Solver<double> *gs = nullptr;
+      std::vector<double> xv;
+
+      // The main function computing the slope
+      void toIntegrate(double t, double x[], double dxdt[]) {
+
+        size_t N = gs->getComponentSize(); // number of equations
+        std::memmove(xv.data(), x, N * sizeof(double)); // moving from array to vector
+        std::vector<double> res;                            
+        gs->dxdt(xv, res);                                  // getting the derivative via solver.
+        std::memmove(dxdt, res.data(), N * sizeof(double)); // getting the result back into array
+      }
+
+      // Integrator for the system
+      void integrate(Solver<double> &s) {
+        gs = &s; // Set the global Solver
+        int neqn = s.getComponentSize();
+        // Reserve enough space in input
+        xv.reserve(neqn);		// number of equations
+
+        // This is heap allocated to avoid VLA
+        double *Y = new double[neqn];
+        double *YP = new double[neqn];
+        double t = 0; // The current value of time.
+        double tout = 50;		// how many seconds
+        double abserr = sqrt(DBL_EPSILON); // abs errors for rk45
+        double relerr = sqrt(DBL_EPSILON); // relative errors for rk45
+        int FLAG = 0;		     // API for rk45 call
+
+        // Initial values for integrating the state space equations
+        Y[0] = 0; Y[1] = 1; Y[2] = 2; Y[3] = 10;
+
+        // Write the result to a file
+        std::ofstream file("/tmp/test2.csv");
+        // First write the very first line
+        // The header
+        file << "Time(sec), L1, L2, C, L3" << "\n";
+        file << t << "," << Y[0] << "," << Y[1] << "," << Y[2] << "," << Y[3] << "\n";
+        // Call the integrator -- one step mode
+        while (FLAG != 2) {		// FLAG = 2 at end of time 50 seconds.
+          // Call the rk45 solver.
+          FLAG = r8_rkf45(toIntegrate, neqn, Y, YP, &t, tout, &relerr, abserr, -1);
+          // Write the output after each integration step
+          file << t << ", " << Y[0] << "," << Y[1] << "," << Y[2] << "," << Y[3]
+               << "\n";
+        }
+        file.close();			// close the file
+        delete[] Y;			// delete the allocated arrays
+        delete[] YP;
+      }
+
+      int main() {
+        // .....same code as before....define components, etc...
+        
+        // Try simplifying this graph
+        bg.simplify(); // works fine.
+
+        // Now do causal analysis
+        bg.assignCausality();
+
+        // Now produce the state space equations
+        expressionAst ast = bg.generateStateSpace();
+        const expression_t &res = l1.getStateEq(ast);
+        const expression_t &res2 = l2.getStateEq(ast);
+        const expression_t &resc = c.getStateEq(ast);
+        const expression_t &res3 = l3.getStateEq(ast);
+
+        print_state_eqns(res, "l1", ast);
+        print_state_eqns(res2, "l2", ast);
+        print_state_eqns(resc, "C", ast);
+        print_state_eqns(res3, "l3", ast);
+
+        // Get the slope of a given state equation
+        // Make the consts first
+        component_map_t<double> consts;
+        consts[&se] = 1.0; consts[&r] = 1; consts[&l1] = 2; consts[&gy] = 2; consts[&l2] = 2;
+        consts[&r2] = 1; consts[&tf] = -2; consts[&c] = 2; consts[&se2] = -2; consts[&l3] = 2;
+        // Storage components whose state space we want to solve
+        std::vector<storageVariant> storageComponents{&l1, &l2, &c, &l3};
+        // The (symbolic) solver we will use to compute the (ODE) slopes
+        // during integration.
+        Solver<double> s{ast, std::move(consts), storageComponents};
+        // Integrate using RK45 solver
+        integrate(s);
+      }
+
+    #+end_src
+  - The complete example is present in tests/test2.cpp in the libBG directory.
+  - The output of the running the ~test2~ is a csv file that can be
+    plotted to obtain the result in [[fig:res]].
+
+    #+CAPTION: Result of integrating the ODEs of the bond graph model
+    #+ATTR_ORG: :width 400
+    #+ATTR_HTML: :width 800
+    #+NAME: fig:res
+    [[file:figs/test2.png]]
+  - One can observe that the system dynamics fluctuate as expected
+    (overshoot, undershoot, etc) before settling to the stable state.
+

@@ -74,7 +74,7 @@ private:
   expression_t *outx = nullptr;
   Causality in = Causality::ACausal;  // The in causality
   Causality out = Causality::ACausal; // The out causality for this port.
-  size_t nID = 0;    // neighbour that I am connected to
+  size_t nID = 0;                     // neighbour that I am connected to
   PortType mType;
   bool assigned = false;
 };
@@ -313,10 +313,10 @@ private:
   std::string value;
   const char *name;     // The user name of the component
   std::string internal; // For C and L type components
-  size_t ID;        // The unique ID generated internally for each component
+  size_t ID;            // The unique ID generated internally for each component
   ComponentType myT;
-  bool deleted = false;    // Has this been deleted from the graph
-                           // during simplification.
+  bool deleted = false; // Has this been deleted from the graph
+                        // during simplification.
 };
 
 // This is the variant with all the different components
@@ -362,7 +362,6 @@ struct StorageEqual {
     return lname == rname;
   }
 };
-
 
 // Printing the enum
 static std::ostream &operator<<(std::ostream &os, const ComponentType &c) {
