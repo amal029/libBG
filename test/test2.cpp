@@ -1,18 +1,70 @@
 #include "BondGraph.hpp"
 #include "Component.hpp"
-#include <cstddef>
-#include <iostream>
-#include <unordered_map>
-#include <variant>
-#include <vector>
 #include "Solver.hpp"
 #include "expression.hpp"
+#include "rkf45.hpp"
+#include <cfloat>
+#include <cstddef>
+#include <cstring>
+#include <iostream>
+#include <semaphore>
+#include <unordered_map>
+#include <vector>
 
 void print_state_eqns(const expression_t &res, const char *name,
                       expressionAst &ast) {
   std::cout << std::format("State eq {}: ", name);
   print_expression_t(std::cout, res, ast);
   std::cout << "\n";
+}
+
+// Use global variables for making things more efficient.
+Solver<double> *gs = nullptr;
+std::vector<double> xv;
+
+void toIntegrate(double t, double x[], double dxdt[]) {
+
+  size_t N = gs->getComponentSize();
+  memmove(xv.data(), x, N * sizeof(double));
+  std::vector<double> res;                            // overhead
+  gs->dxdt(xv, res);                                  // getting the derivative
+  std::memmove(dxdt, res.data(), N * sizeof(double)); // getting the result back
+}
+
+// Declare the function that will be called by the integrator
+void integrate(Solver<double> &s) {
+  gs = &s; // Set the global Solver
+  int neqn = s.getComponentSize();
+  // Reserve enough space in input
+  xv.reserve(neqn);
+
+  double *Y = new double[neqn];
+  double *YP = new double[neqn];
+  double t = 0; // The current value of time.
+  double tout = 1;
+  double abserr = sqrt(DBL_EPSILON);
+  double relerr = sqrt(DBL_EPSILON);
+  int FLAG = -1;
+
+  // Initial values
+  Y[0] = 0;
+  Y[1] = 1;
+  Y[2] = 2;
+  Y[3] = 10;
+
+  // Call the integrator -- one step mode
+  while (FLAG != 2) {
+    FLAG = r8_rkf45(toIntegrate, neqn, Y, YP, &t, tout, &relerr, abserr, -1);
+    std::cout << t << ": ";
+    std::cout << "[";
+    for (size_t i = 0; i < (size_t)neqn; ++i) {
+      std::cout << Y[i] << " ";
+    }
+    std::cout << "]\n";
+  }
+
+  delete[] Y;
+  delete[] YP;
 }
 
 int main() {
@@ -88,11 +140,6 @@ int main() {
   bg.connect(se2, v1);
   bg.connect(v1, l3);
 
-  // Modify these
-  // bg.connect(tf, v1);
-  // bg.connect(v1, l3);
-  // bg.connect(se2, v1);
-
   // Try simplifying this graph
   bg.simplify(); // works fine.
 
@@ -125,7 +172,6 @@ int main() {
   consts[&se2] = -2;
   consts[&l3] = 2;
   std::vector<storageVariant> storageComponents{&l1, &l2, &c, &l3};
-  std::vector<double> initValues{0, 1, 2, 10};
   Solver<double> s{ast, std::move(consts), storageComponents};
   // Print the things again
   print_state_eqns(res, "l1", ast);
@@ -133,14 +179,6 @@ int main() {
   print_state_eqns(resc, "C", ast);
   print_state_eqns(res3, "l3", ast);
 
-  // IMPORTANT: Note that the initValues and result will be in order
-  // declared for storageComponents above.
-  std::vector<double> result;
-  s.dxdt(initValues, result);
-  std::cout << "DxDt\n";
-  for (size_t counter = 0; counter < storageComponents.size(); ++counter) {
-    const char *name = std::visit([](auto const &x) { return x->getName(); },
-                                  storageComponents[counter]);
-    std::cout << name << ": " << result[counter] << "\n";
-  }
+  // Integrate using RK45 solver
+  integrate(s);
 }

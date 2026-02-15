@@ -3,7 +3,7 @@
 #include "expression.hpp"
 #include "util.hpp"
 #include <algorithm>
-#include <iostream>
+// #include <iostream>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -22,11 +22,9 @@ template <NumericType T = double> struct Solver {
                   const std::vector<storageVariant> &comps)
       : _ast(ast), _comps(comps) {
 
-    // Now perform dependence analysis to order them correctly.
-    std::vector<bool> isDeriv = reorder(_comps);
-    bool res = std::any_of(isDeriv.begin(), isDeriv.end(),
-                           [](bool x) { return x == true; });
-    if (res) {
+    // Now find if this is a DAE
+    bool isDeriv = isDAE(_comps);
+    if (isDeriv) {
       throw NotYetImplemented("DAEs not yet implemented");
     }
     consts_t<T> _consts;
@@ -64,6 +62,10 @@ template <NumericType T = double> struct Solver {
   Solver &operator=(const Solver &) = delete;
   Solver &operator=(Solver &&) = default;
 
+  constexpr size_t getComponentSize() const {
+    return _comps.size();
+  }
+
   constexpr void dxdt(const std::vector<T> &xT, std::vector<T> &dxdt) {
     // First turn the initial values from
     // Component:v --> string:v
@@ -92,32 +94,26 @@ private:
   // XXX: Reorder so that all the equations that need derivatives come
   // last.
   [[nodiscard]]
-  std::vector<bool> reorder(std::vector<storageVariant> &_comps) {
-    std::vector<bool> toret;
-    toret.resize(_comps.size(), false);
+  bool isDAE(const std::vector<storageVariant> &_comps) {
+    bool toret = false;
     size_t i = 0;
-    size_t j = _comps.size() - 1;
-    while (i != j || i != _comps.size() - 1) {
+    while (i <= _comps.size() - 1) {
       const expression_t &exp = std::visit(
           [&](const auto &x) -> const expression_t & {
             return x->getStateEq(_ast);
           },
           _comps[i]);
       // Does this exp have a derivative on the right?
-      bool res = std::visit(
+      toret = std::visit(
           [&](const auto &x) -> bool { return x.hasDeriv(_ast); }, exp);
-      if (res) {
-        std::swap(_comps[i], _comps[j]);
-        toret[i] = true;
-        --j;
-      } else {
-        ++i;
-      }
+      if (toret)
+        break;
+      ++i;
     }
     return toret;
   }
 
   consts_t<T> iValues;
   expressionAst &_ast;
-  std::vector<storageVariant> _comps;
+  const std::vector<storageVariant> &_comps;
 };

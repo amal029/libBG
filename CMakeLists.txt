@@ -11,11 +11,17 @@ set(CMAKE_CXX_STANDARD 23)
 # Get package ginac
 # pkg_check_modules(GINAC REQUIRED ginac)
 
+# The third-party dir
+set(THIRD_PARTY_DIR src/thirdparty)
+
+# The third party cpp file
+file(GLOB_RECURSE THIRD_PARTY_SRCS ${THIRD_PARTY_DIR}/*.cpp)
+
 # For lsp language server
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # The include directory
-set(INCLUDES src/includes)
+set(INCLUDES src/includes ${THIRD_PARTY_DIR})
 
 # The compiler options
 set (CXX_FLAGS -O3 -Wall -Werror -Wpedantic -Wextra -Wno-unused-parameter -Wno-unused-function)
@@ -38,10 +44,10 @@ target_compile_options(test1 PRIVATE ${CXX_FLAGS})
 #--------------------------Test 2--------------------------------------
 # The second test
 # Add executable target with source files listed in SOURCE_FILES variable
-add_executable(test2 ../test/test2.cpp)
+add_executable(test2 ../test/test2.cpp ${THIRD_PARTY_SRCS})
 
 # The include directory
-target_include_directories(test2 PRIVATE ${INCLUDES})
+target_include_directories(test2 PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
 
 target_compile_options(test2 PRIVATE ${CXX_FLAGS})
 # target_link_directories(test2 PRIVATE ${GINAC_LIBRARY_DIRS})
