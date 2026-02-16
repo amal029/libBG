@@ -25,7 +25,7 @@ template <NumericType T = double> struct Solver {
 
     // Now find if this is a DAE
     bool isDeriv = isDAE(_comps);
-    if (isDeriv) {
+    [[unlikely]] if (isDeriv) {
       throw NotYetImplemented("DAEs not yet implemented");
     }
     consts_t<T> _consts;
@@ -63,9 +63,12 @@ template <NumericType T = double> struct Solver {
   Solver &operator=(const Solver &) = delete;
   Solver &operator=(Solver &&) = default;
 
-  constexpr size_t getComponentSize() const { return _comps.size(); }
+  [[nodiscard]]
+  constexpr size_t getComponentSize() const {
+    return _comps.size();
+  }
 
-  constexpr void dxdt(const std::vector<T> &xT, std::span<T> dxdt) {
+  void dxdt(const std::vector<T> &xT, std::span<T> dxdt) {
     // First turn the initial values from
     // Component:v --> string:v
     for (size_t counter = 0; counter < _comps.size(); ++counter) {
@@ -111,7 +114,7 @@ private:
     return toret;
   }
 
-  consts_t<T> iValues;
+  consts_t<T> iValues{};
   expressionAst &_ast;
   const std::vector<storageVariant> &_comps;
 };
