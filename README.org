@@ -133,7 +133,7 @@
       mkdir -p build		# Make a build directory
       cd build && cmake ..  	# build using cmake
       make			# compile the library and examples
-      ./test2 			# run the above program
+      ./hoistingDevice 			# run the above program
     #+end_src
   - The output you should get the following output
     #+NAME: output
@@ -188,7 +188,7 @@
         xv.push_back(10);
 
         // Write the result to a file
-        std::ofstream file("/tmp/test2.csv");
+        std::ofstream file("/tmp/hoistingDevice.csv");
         assert(file.is_open());
         // First write the very first line
         // The header
@@ -243,8 +243,8 @@
       }
 
     #+end_src
-  - The complete example is present in tests/test2.cpp in the libBG directory.
-  - The output of the running the ~test2~ is a csv file that can be
+  - The complete example is present in tests/hoistingDevice.cpp in the libBG directory.
+  - The output of the running the ~hoistingDevice~ is a csv file that can be
     plotted to obtain the result in [[fig:res]].
 
     #+CAPTION: Result of integrating the ODEs of the bond graph model
