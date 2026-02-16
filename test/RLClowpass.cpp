@@ -18,12 +18,11 @@ void print_state_eqns(const expression_t &res, const char *name,
 
 // Use global variables for making things more efficient.
 Solver<double> *gs = nullptr;
+std::vector<double> xT(2, 0);
 
 // We need this function signature, because the library demands it.
 void toIntegrate(double t, double x[], double dxdt[]) {
   std::span<double> ptr(dxdt, gs->getComponentSize());
-  std::vector<double> xT;
-  xT.reserve(2);
   std::memcpy(xT.data(), x, 2 * sizeof(double));
   gs->dxdt(xT, ptr); // getting the derivative
 }
