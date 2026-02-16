@@ -1,12 +1,12 @@
 #include "BondGraph.hpp"
 #include "Component.hpp"
-#include "expression.hpp"
 #include "Solver.hpp"
-#include <cstring>
-#include <iostream>
 #include "euler.hpp"
+#include "expression.hpp"
 #include <cfloat>
+#include <cstring>
 #include <fstream>
+#include <iostream>
 #include <vector>
 
 void print_state_eqns(const expression_t &res, const char *name,
@@ -18,14 +18,13 @@ void print_state_eqns(const expression_t &res, const char *name,
 
 // Use global variables for making things more efficient.
 Solver<double> *gs = nullptr;
-std::vector<double> xv;
 
 // We need this function signature, because the library demands it.
 void toIntegrate(double t, double x[], double dxdt[]) {
   std::span<double> ptr(dxdt, gs->getComponentSize());
   std::vector<double> xT;
   xT.reserve(2);
-  std::memcpy(xT.data(), x, 2*sizeof(double));
+  std::memcpy(xT.data(), x, 2 * sizeof(double));
   gs->dxdt(xT, ptr); // getting the derivative
 }
 
@@ -34,14 +33,15 @@ void integrate(Solver<double> &s) {
   const int N = 10000;
   gs = &s; // Set the global Solver
   const int M = s.getComponentSize();
+  
+  std::vector<double> xv;
   // Reserve enough space in input
-  xv.reserve(M*(N+1));
+  xv.reserve(M * (N + 1));
 
-  // This is heap allocated to avoid VLA
-  double t[N+1] = {0};
+  // Stack allocated
+  double t[N + 1] = {0};
 
-  // Write the result to a file
-  // Call the integrator -- one step mode
+  // Call the integrator -- multi-step mode
   assert(M == 2);
   double tspan[2] = {0, 2};
   double initial[2] = {0, 0};
@@ -58,10 +58,10 @@ void integrate(Solver<double> &s) {
 int main() {
   Component<ComponentType::SE> se{"se"}; // voltage (effort) source
   Component<ComponentType::R> r{"r"};    // resistor
-  Component<ComponentType::C> c{"c"};    // resistor
-  Component<ComponentType::L> l{"l"};    // resistor
+  Component<ComponentType::C> c{"c"};    // capacitor
+  Component<ComponentType::L> l{"l"};    // inductor
   Component<ComponentType::J1> j1{"j1"}; // 1 Junction (in series)
-  Component<ComponentType::J0> j0{"j0"}; // 1 Junction (in series)
+  Component<ComponentType::J0> j0{"j0"}; // 0 Junction (in parallel)
   BondGraph bg;
   bg.addComponent(&se);
   bg.addComponent(&r);
@@ -86,7 +86,8 @@ int main() {
   // Print the state equations
   print_state_eqns(l.getStateEq(ast), "L", ast);
   print_state_eqns(c.getStateEq(ast), "C", ast);
-  // Integrate to get the result
+
+  // Set the constant value
   component_map_t<double> consts;
   consts[&se] = 24;
   consts[&c] = 1e-3;
@@ -97,8 +98,8 @@ int main() {
   Solver<double> s{ast, std::move(consts), storageComponents};
   print_state_eqns(l.getStateEq(ast), "L", ast);
   print_state_eqns(c.getStateEq(ast), "C", ast);
-  
-  // Integrate using RK45 solver
+
+  // Integrate using euler solver
   integrate(s);
   return 0;
 }
