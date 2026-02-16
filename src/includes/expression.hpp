@@ -38,21 +38,21 @@ struct Number {
   constexpr explicit Number(double n) : num(n) {}
   Number(const Number &) = delete;
   Number(Number &&) = default;
-  bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
+  bool pushSymbol(std::queue<size_t *> &, std::vector<expression_t> &) {
     return false;
   }
   template <NumericType T>
-  bool subs(const consts_t<T> &consts, std::vector<expression_t> &arena) {
+  bool subs(const consts_t<T> &, std::vector<expression_t> &_) {
     return false;
   }
   template <NumericType T = double>
-  T eval(const consts_t<T> &vars, const expressionAst &arena) const {
+  T eval(const consts_t<T> &, const expressionAst &_) const {
     return static_cast<T>(num);
   }
   bool hasDeriv(const expressionAst &) const { return false; }
   T getT() const { return t; }
   double getNum() const { return num; }
-  void print_expr(std::ostream &os, const expressionAst &ast) const {
+  void print_expr(std::ostream &os, const expressionAst &) const {
     os << num;
   }
 
@@ -67,15 +67,15 @@ struct Symbol {
       : name(n), isConst(isC) {}
   Symbol(const Symbol &) = delete;
   Symbol(Symbol &&) = default;
-  bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
+  bool pushSymbol(std::queue<size_t *> &, std::vector<expression_t> &_) {
     return (!isConst);
   }
   template <NumericType T>
-  bool subs(const consts_t<T> &consts, std::vector<expression_t> &arena) {
+  bool subs(const consts_t<T> &consts, std::vector<expression_t> &_) {
     return consts.contains(std::string(name));
   }
   template <typename T = double>
-  T eval(const consts_t<T> &vars, const expressionAst &arena) const {
+  T eval(const consts_t<T> &vars, const expressionAst &_) const {
     // Lookup the symbol inside the maps and return its value
     if (vars.contains(std::string(name))) {
       return vars.at(std::string(name));
@@ -86,7 +86,7 @@ struct Symbol {
   bool hasDeriv(const expressionAst &) const { return name.starts_with('d'); }
   T getT() const { return t; }
   const std::string_view &getName() const { return name; }
-  void print_expr(std::ostream &os, const expressionAst &ast) const {
+  void print_expr(std::ostream &os, const expressionAst &) const {
     os << name;
     // os << name.substr(0, name.find('_'));
   }
@@ -183,18 +183,23 @@ template <EOP op> struct Expression {
                         ast[getRight()]);
 
     if constexpr (op == EOP::ADD) {
+      // std::cout << lval << "+" << rval << "\n";
       return lval + rval;
     } else if constexpr (op == EOP::DIV) {
+      // std::cout << lval << "/" << rval << "\n";
       if (rval != 0) {
         return lval / rval;
       } else {
         throw DivideByZero("Divide by zero error");
       }
     } else if constexpr (op == EOP::SUB) {
+      // std::cout << lval << "-" << rval << "\n";
       return lval - rval;
     } else if constexpr (op == EOP::MUL) {
+      // std::cout << lval << "*" << rval << "\n";
       return lval * rval;
     } else if constexpr (op == EOP::EQ) {
+      // std::cout << lval << "=" << rval << "\n";
       return ((lval - rval) == 0);
     }
   }

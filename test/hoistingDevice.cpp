@@ -58,7 +58,8 @@ void integrate(Solver<double> &s) {
   // First write the very first line
   // The header
   file << "Time(sec), L1, L2, C, L3" << "\n";
-  file << t << "," << xv[0] << "," << xv[1] << "," << xv[2] << "," << xv[3] << "\n";
+  file << t << "," << xv[0] << "," << xv[1] << "," << xv[2] << "," << xv[3]
+       << "\n";
   // Call the integrator -- one step mode
   while (FLAG != 2) {
     FLAG = r8_rkf45(toIntegrate, neqn, xv.data(), YP, &t, tout, &relerr, abserr,

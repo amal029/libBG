@@ -16,6 +16,7 @@ set(THIRD_PARTY_DIR src/thirdparty)
 
 # The third party cpp file
 file(GLOB_RECURSE THIRD_PARTY_SRCS ${THIRD_PARTY_DIR}/*.cpp)
+message(${THIRD_PARTY_SRCS})
 
 # For lsp language server
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -29,29 +30,29 @@ set (CXX_FLAGS -O3 -Wall -Werror -Wpedantic -Wextra -Wno-unused-parameter -Wno-u
 # Add ex1.cpp file of the project root directory as a source file
 # set(SOURCE_FILES ../test/test1.cpp)
 
-#------------------------Test executables from here ------------------
+#------------------------Test executables from here (Test 1)------------------
 # Add executable target with source files listed in SOURCE_FILES variable
-add_executable(test1 ../test/test1.cpp)
+add_executable(RLClowpass ../test/RLClowpass.cpp ${THIRD_PARTY_SRCS})
 
 # The include directory
-# target_include_directories(test1 PRIVATE ${INCLUDES} ${GINAC_INCLUDE_DIRS})
-target_include_directories(test1 PRIVATE ${INCLUDES})
+# target_include_directories(RLClowpass PRIVATE ${INCLUDES} ${GINAC_INCLUDE_DIRS})
+target_include_directories(RLClowpass PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
 
-target_compile_options(test1 PRIVATE ${CXX_FLAGS})
+target_compile_options(RLClowpass PRIVATE ${CXX_FLAGS})
 # target_link_directories(test1 PRIVATE ${GINAC_LIBRARY_DIRS})
 # target_link_libraries(test1 PRIVATE ${GINAC_LIBRARIES})
 
 #--------------------------Test 2--------------------------------------
 # The second test
 # Add executable target with source files listed in SOURCE_FILES variable
-add_executable(test2 ../test/test2.cpp ${THIRD_PARTY_SRCS})
+add_executable(hoistingDevice ../test/hoistingDevice.cpp ${THIRD_PARTY_SRCS})
 
 # The include directory
-target_include_directories(test2 PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
+target_include_directories(hoistingDevice PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
 
-target_compile_options(test2 PRIVATE ${CXX_FLAGS})
-# target_link_directories(test2 PRIVATE ${GINAC_LIBRARY_DIRS})
-# target_link_libraries(test2 PRIVATE ${GINAC_LIBRARIES})
+target_compile_options(hoistingDevice PRIVATE ${CXX_FLAGS})
+# target_link_directories(hoistingDevice PRIVATE ${GINAC_LIBRARY_DIRS})
+# target_link_libraries(hoistingDevice PRIVATE ${GINAC_LIBRARIES})
 
 #----------------------- Example 1---------------------
 # Add executable target with source files listed in SOURCE_FILES variable

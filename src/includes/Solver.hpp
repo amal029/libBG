@@ -3,6 +3,7 @@
 #include "expression.hpp"
 #include "util.hpp"
 #include <algorithm>
+#include <iostream>
 #include <span>
 #include <unordered_map>
 #include <utility>
@@ -81,7 +82,8 @@ template <NumericType T = double> struct Solver {
             const expression_t &ee = x->getStateEq(_ast);
             const Expression<EOP::EQ> *_ee =
                 std::get_if<Expression<EOP::EQ>>(&ee);
-            return eval(_ast[_ee->getRight()], iValues, _ast);
+            T res = eval(_ast[_ee->getRight()], iValues, _ast);
+            return res;
           },
           _comps[counter]);
       dxdt[counter] = res;
