@@ -80,8 +80,8 @@ template <NumericType T = double> struct Solver {
             _comps[counter]);
         iValue_keys.push_back(vv);
         iValues[vv] = xT[counter];
-        firstTime = false;
       }
+      firstTime = false;
     } else {
       for (size_t counter = 0; counter < _comps.size(); ++counter) {
         iValues[iValue_keys[counter]] = xT[counter];
