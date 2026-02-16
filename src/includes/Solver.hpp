@@ -69,13 +69,23 @@ template <NumericType T = double> struct Solver {
   }
 
   void dxdt(const std::vector<T> &xT, std::span<T> dxdt) {
+    static bool firstTime = true;
     // First turn the initial values from
     // Component:v --> string:v
-    for (size_t counter = 0; counter < _comps.size(); ++counter) {
-      std::string vv = std::visit(
-          [](const auto &x) { return x->getInternalName().substr(1); },
-          _comps[counter]);
-      iValues[vv] = xT[counter];
+    if (firstTime) {
+      iValue_keys.reserve(_comps.size());
+      for (size_t counter = 0; counter < _comps.size(); ++counter) {
+        std::string vv = std::visit(
+            [](const auto &x) { return x->getInternalName().substr(1); },
+            _comps[counter]);
+        iValue_keys.push_back(vv);
+        iValues[vv] = xT[counter];
+        firstTime = false;
+      }
+    } else {
+      for (size_t counter = 0; counter < _comps.size(); ++counter) {
+        iValues[iValue_keys[counter]] = xT[counter];
+      }
     }
     // dxdt.reserve(_comps.size());
     for (size_t counter = 0; counter < _comps.size(); ++counter) {
@@ -98,7 +108,7 @@ private:
   bool isDAE(const std::vector<storageVariant> &_comps) {
     bool toret = false;
     size_t i = 0;
-    while (i <= _comps.size() - 1) {
+    while (i < _comps.size()) {
       const expression_t &exp = std::visit(
           [&](const auto &x) -> const expression_t & {
             return x->getStateEq(_ast);
@@ -114,6 +124,7 @@ private:
     return toret;
   }
 
+  std::vector<std::string> iValue_keys{};
   consts_t<T> iValues{};
   expressionAst &_ast;
   const std::vector<storageVariant> &_comps;
