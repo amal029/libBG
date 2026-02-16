@@ -3,7 +3,6 @@
 #include "expression.hpp"
 #include "util.hpp"
 #include <algorithm>
-#include <iostream>
 #include <span>
 #include <unordered_map>
 #include <utility>
@@ -32,12 +31,14 @@ template <NumericType T = double> struct Solver {
     _consts.reserve(consts.size());
     // Convert the component -> value map to string -> value map
     for (const auto &[k, v] : consts) {
-      // XXX: This should do small string optimisation
       std::string vv =
           std::visit([](const auto &x) { return x->getValue(); }, k);
       _consts[vv] = std::move(v);
     }
     // Here replace the constants with their values for all dxdt expressions
+    // Initialize the keys
+    iValue_keys.reserve(_comps.size());
+
     for (const storageVariant &_comp : _comps) {
       const expression_t &ee = std::visit(
           [&](auto &x) -> const expression_t & { return x->getStateEq(_ast); },
@@ -55,6 +56,12 @@ template <NumericType T = double> struct Solver {
             _ast.append(Number{_consts[std::string(torep->getName())]});
         _ee->setRight(nindex); // replace the right with the new number
       }
+      std::string vv = std::visit(
+          [](const auto &x) -> std::string {
+            return x->getInternalName().substr(1);
+          },
+          _comp);
+      iValue_keys.push_back(vv);
     }
   }
 
@@ -69,24 +76,9 @@ template <NumericType T = double> struct Solver {
   }
 
   void dxdt(const std::vector<T> &xT, std::span<T> dxdt) {
-    // First turn the initial values from
-    // Component:v --> string:v
-    if (!_initialized) {
-      iValue_keys.reserve(_comps.size());
-      for (size_t counter = 0; counter < _comps.size(); ++counter) {
-        std::string vv = std::visit(
-            [](const auto &x) { return x->getInternalName().substr(1); },
-            _comps[counter]);
-        iValue_keys.push_back(vv);
-        iValues[vv] = xT[counter];
-      }
-      _initialized = true;
-    } else {
-      for (size_t counter = 0; counter < _comps.size(); ++counter) {
-        iValues[iValue_keys[counter]] = xT[counter];
-      }
+    for (size_t counter = 0; counter < _comps.size(); ++counter) {
+      iValues[iValue_keys[counter]] = xT[counter];
     }
-    // dxdt.reserve(_comps.size());
     for (size_t counter = 0; counter < _comps.size(); ++counter) {
       // Then just get the slope/value
       T res = std::visit(
@@ -123,7 +115,7 @@ private:
     return toret;
   }
 
-  bool _initialized = false;
+  // XXX: iValue_keys and iValues should both be string_view
   std::vector<std::string> iValue_keys{};
   consts_t<T> iValues{};
   expressionAst &_ast;
