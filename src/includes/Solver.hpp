@@ -71,7 +71,7 @@ template <NumericType T = double> struct Solver {
   void dxdt(const std::vector<T> &xT, std::span<T> dxdt) {
     // First turn the initial values from
     // Component:v --> string:v
-    if (_initialized) {
+    if (!_initialized) {
       iValue_keys.reserve(_comps.size());
       for (size_t counter = 0; counter < _comps.size(); ++counter) {
         std::string vv = std::visit(
@@ -80,7 +80,7 @@ template <NumericType T = double> struct Solver {
         iValue_keys.push_back(vv);
         iValues[vv] = xT[counter];
       }
-      _initialized = false;
+      _initialized = true;
     } else {
       for (size_t counter = 0; counter < _comps.size(); ++counter) {
         iValues[iValue_keys[counter]] = xT[counter];
@@ -123,7 +123,7 @@ private:
     return toret;
   }
 
-  bool _initialized = true;
+  bool _initialized = false;
   std::vector<std::string> iValue_keys{};
   consts_t<T> iValues{};
   expressionAst &_ast;
