@@ -53,7 +53,7 @@ template <NumericType T = double> struct Solver {
         const Symbol *torep = std::get_if<Symbol>(&_ast[_ee->getRight()]);
         assert(torep != nullptr);
         // I do this before, because after append _ee might be invalidated.
-        _ee->setRight(_ast.size() + 1); // replace the right with the new number
+        _ee->setRight(_ast.size()); // replace the right with the new number
         size_t _ =
             _ast.append(Number{_consts[torep->getName()]});
       }
