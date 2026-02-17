@@ -2,10 +2,8 @@
 #include "exception.hpp"
 #include "expression.hpp"
 #include "util.hpp"
-#include <algorithm>
 #include <span>
 #include <unordered_map>
-#include <utility>
 #include <variant>
 #include <vector>
 
@@ -31,9 +29,9 @@ template <NumericType T = double> struct Solver {
     _consts.reserve(consts.size());
     // Convert the component -> value map to string -> value map
     for (const auto &[k, v] : consts) {
-      std::string vv =
-          std::visit([](const auto &x) { return x->getValue(); }, k);
-      _consts[vv] = std::move(v);
+      std::string_view vv = std::visit(
+          [](const auto &x) -> std::string_view { return x->getValue(); }, k);
+      _consts[vv] = v;
     }
     // Here replace the constants with their values for all dxdt expressions
     // Initialize the keys
@@ -56,12 +54,12 @@ template <NumericType T = double> struct Solver {
             _ast.append(Number{_consts[std::string(torep->getName())]});
         _ee->setRight(nindex); // replace the right with the new number
       }
-      std::string vv = std::visit(
-          [](const auto &x) -> std::string {
-            return x->getInternalName().substr(1);
+      std::string_view vv = std::visit(
+          [](const auto &x) -> std::string_view {
+            return x->getInternalName();
           },
           _comp);
-      iValue_keys.push_back(vv);
+      iValue_keys.push_back(vv.substr(1));
     }
   }
 
@@ -116,7 +114,7 @@ private:
   }
 
   // XXX: iValue_keys and iValues should both be string_view
-  std::vector<std::string> iValue_keys{};
+  std::vector<std::string_view> iValue_keys{};
   consts_t<T> iValues{};
   expressionAst &_ast;
   const std::vector<storageVariant> &_comps;
