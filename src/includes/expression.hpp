@@ -146,7 +146,7 @@ template <EOP op> struct Expression {
     if (res) {
       std::string_view name = std::get_if<Symbol>(&arena[left])->getName();
       // Substitute the left with the number
-      arena.emplace_back(Number{consts.at(std::string(name))});
+      arena.emplace_back(Number{consts.at(name)});
       left = arena.size() - 1; // set the pointer to the const value
     }
     res = std::visit([&](auto &x) { return x.subs(consts, arena); },
@@ -154,7 +154,7 @@ template <EOP op> struct Expression {
     if (res) {
       std::string_view name = std::get_if<Symbol>(&arena[right])->getName();
       // Substitute the right with the number
-      arena.emplace_back(Number{consts.at(std::string(name))});
+      arena.emplace_back(Number{consts.at(name)});
       right = arena.size() - 1; // set the pointer to the const value
     }
     return false;

@@ -19,10 +19,12 @@ template <NumericType T = double> struct Solver {
   explicit Solver(expressionAst &ast, component_map_t<T> &&consts,
                   const std::vector<storageVariant> &comps)
       : _ast(ast), _comps(comps) {
-
+    if (comps.empty()) {
+      throw std::invalid_argument("Solver requires at least one component");
+    }
     // Now find if this is a DAE
     bool isDeriv = isDAE(_comps);
-    [[unlikely]] if (isDeriv) {
+    if (isDeriv) {
       throw NotYetImplemented("DAEs not yet implemented");
     }
     consts_t<T> _consts;
@@ -50,9 +52,10 @@ template <NumericType T = double> struct Solver {
         // consts and get its value v.
         const Symbol *torep = std::get_if<Symbol>(&_ast[_ee->getRight()]);
         assert(torep != nullptr);
-        size_t nindex =
-            _ast.append(Number{_consts[std::string(torep->getName())]});
-        _ee->setRight(nindex); // replace the right with the new number
+        // I do this before, because after append _ee might be invalidated.
+        _ee->setRight(_ast.size() + 1); // replace the right with the new number
+        size_t _ =
+            _ast.append(Number{_consts[torep->getName()]});
       }
       std::string_view vv = std::visit(
           [](const auto &x) -> std::string_view {
@@ -113,7 +116,6 @@ private:
     return toret;
   }
 
-  // XXX: iValue_keys and iValues should both be string_view
   std::vector<std::string_view> iValue_keys{};
   consts_t<T> iValues{};
   expressionAst &_ast;
