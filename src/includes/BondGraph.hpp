@@ -50,10 +50,14 @@ struct BondGraph {
     components[els] = x; // add it to the correct position
   }
 
+  // Concept to constraint the type of connections
   // Adding the edge between the components (also add the port for these
   // components)
   template <ComponentType X, ComponentType Y>
   void connect(Component<X> &in, Component<Y> &out) {
+    static_assert(X == ComponentType::J0 || X == ComponentType::J1 ||
+                  Y == ComponentType::J0 ||
+                  Y == ComponentType::J1, "Can only connect to a Junction");
     // First assign the port for the in and out
     in.addPort(Port(PortType::OUT, out.getID()));
     out.addPort(Port(PortType::IN, in.getID()));
@@ -78,7 +82,7 @@ struct BondGraph {
 
   // Get all the source IDs in the graph
   void getSources(std::vector<size_t> &sources) const {
-    using source_e = Component<ComponentType::SE>*;
+    using source_e = Component<ComponentType::SE> *;
     using source_f = Component<ComponentType::SF> *;
 
     for (size_t i = 0; i < getNumComponents(); ++i) {
@@ -198,16 +202,18 @@ private:
   }
 
   template <ComponentType T> void simplify1(Component<T> &x) {
-    if ((T == ComponentType::J0 || T == ComponentType::J1) &&
-        canElimJunction(x)) {
-      elimJunction(x);
+    if constexpr (T == ComponentType::J0 || T == ComponentType::J1) {
+      if (canElimJunction(x)) {
+        elimJunction(x);
+      }
     }
   }
 
   template <ComponentType T> void simplify2(Component<T> &x) {
-    if ((T == ComponentType::J0 || T == ComponentType::J1) &&
-        canContractJunction(x)) {
-      contractJunction(x);
+    if constexpr (T == ComponentType::J0 || T == ComponentType::J1) {
+      if (canContractJunction(x)) {
+        contractJunction(x);
+      }
     }
   }
 
@@ -755,8 +761,8 @@ private:
     std::vector<Port *> jports;
     std::vector<Port *> myjports;
 
-    ComponentType myType = std::visit([](const auto &x) { return x->getType(); },
-                                      getComponentAt(id));
+    ComponentType myType = std::visit(
+        [](const auto &x) { return x->getType(); }, getComponentAt(id));
 
     for (size_t counter = 0; counter < edges[id].size(); ++counter) {
       size_t x = edges[id][counter];
