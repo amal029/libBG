@@ -157,6 +157,46 @@ struct BondGraph {
     // Here do a dfs of the graph and for each port give it a name
     auto visitor = [](auto &x) { x->assignPortName(); };
     dfs(sources, visitor);
+    // Check the causality
+    checkCausalAssignment();
+  }
+
+  template <ComponentType T> void checkCausality(const Component<T> &x) const {
+    std::vector<bool> assigned;
+    size_t numPorts = x.portSize();
+    assigned.resize(numPorts, false);
+    for (size_t i = 0; i < numPorts; ++i) {
+      const Port *p = x.getPort(i);
+      if (p->getAssigned())
+        assigned[i] = true;
+    }
+    bool res =
+        std::all_of(assigned.begin(), assigned.end(), [](bool y) { return y; });
+    if (!res) {
+      throw JunctionAssignment(std::format(
+          "All ports not assigned causality for component {}", x.getID()));
+    }
+    // Now we need to check correctness for J0 and J1
+    if constexpr (T == ComponentType::J0 || T == ComponentType::J1) {
+      x.satisfyConstraints();
+    }
+  }
+
+  // Check that all component ports have been assigned
+  void checkCausalAssignment() {
+    // First get all the sources
+    std::vector<size_t> sources;
+    getSources(sources); // These are all the sources
+
+    // XXX: This handles the case where there are no sources, but only
+    // inputs and outputs.
+    if (sources.empty()) {
+      throw NotFound(
+          "Not source in the Bond Graph to perform causality analysis\n");
+    }
+    // There can be only a single output for a given source
+    auto visitor = [&](const auto &x) { checkCausality(*x); };
+    dfs(sources, visitor);
   }
 
   // This will generate the state space system for the bond graph
@@ -512,7 +552,7 @@ private:
       // Then the output should be equal to the input
       std::vector<Port *> inports = x.getPortWithType(PortType::IN);
       assert(inports.size() == 1);
-      Port* inport = inports[0];
+      Port *inport = inports[0];
       std::vector<Port *> outports = x.getPortWithType(PortType::OUT);
       assert(outports.size() == 1);
       Port *outport = outports[0];
@@ -787,6 +827,8 @@ private:
           "I/O component {} not connected to correct number of components",
           myId));
     }
+    // FIXME: Here we need to check if all the ports have correct
+    // causality. Maybe same place as TF is being checked.
   }
 
   void componentAssignAndPropagateR(
@@ -826,6 +868,11 @@ private:
   }
 
   constexpr void junctionPropagate(size_t id) {
+
+    ComponentType myType = std::visit(
+        [](const auto &x) { return x->getType(); }, getComponentAt(id));
+    assert(myType == ComponentType::J0 || myType == ComponentType::J1);
+
     // Go through all the neighbours and get neighbours that have not
     // yet have a causality assigned
 
@@ -874,9 +921,6 @@ private:
     std::vector<size_t> os;
     std::vector<Port *> oports;
     std::vector<Port *> myoports;
-
-    ComponentType myType = std::visit(
-        [](const auto &x) { return x->getType(); }, getComponentAt(id));
 
     for (size_t counter = 0; counter < edges[id].size(); ++counter) {
       size_t x = edges[id][counter];
@@ -983,7 +1027,7 @@ private:
                                    assignedPorts, myType);
       assignedPorts.push_back(myRports[i]);
     }
-    
+
     // Now assign the junction ports
     for (size_t i = 0; i < js.size(); ++i) {
       componentAssignAndPropagateJ(js[i], jports[i], myjports[i], id,
@@ -1005,23 +1049,23 @@ private:
       assignedPorts.push_back(myoports[i]);
     }
 
-    // Now check that every port in this junction is assigned and check
-    // that constraints are satisfied.
-    assignedPorts.clear();
-    for (size_t i = 0; i < numPorts; ++i) {
-      const Port *p = std::visit([&i](const auto &x) { return x->getPort(i); },
-                                 getComponentAt(id));
-      if (p->getAssigned()) {
-        assignedPorts.push_back(p);
-      }
-    }
-    if (assignedPorts.size() != numPorts) {
-      throw JunctionAssignment(
-          std::format("All of junction {}' port not assigned", id));
-    }
-    // All constraints on this junction are satisfied
-    std::visit([](const auto &x) { x->satisfyConstraints(); },
-               getComponentAt(id));
+    // Now check that every port in this
+    // junction is assigned and check that constraints are satisfied.
+    // assignedPorts.clear();
+    // for (size_t i = 0; i < numPorts; ++i) {
+    //   const Port *p = std::visit([&i](const auto &x) { return x->getPort(i); },
+    //                              getComponentAt(id));
+    //   if (p->getAssigned()) {
+    //     assignedPorts.push_back(p);
+    //   }
+    // }
+    // if (assignedPorts.size() != numPorts) {
+    //   throw JunctionAssignment(
+    //       std::format("All of component {}' port not assigned", id));
+    // }
+    // // All constraints on this junction are satisfied
+    // std::visit([](const auto &x) { x->satisfyConstraints(); },
+    //            getComponentAt(id));
   }
 
   // This function gives the port of the id connected to parent ID (pid)
