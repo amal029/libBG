@@ -282,7 +282,7 @@ template <ComponentType T> struct Component {
                   "Can get output only from an output component");
     if constexpr (T == ComponentType::O) {
       std::vector<Port *> pp = getPortWithType(PortType::IN);
-      std::string_view ss = pp[0]->getInCausalName();
+      std::string_view ss = pp[0]->getOutCausalName();
       std::vector<size_t> eqs = ast.getEQ();
       return pr_getStateEq(ast, ss, eqs);
     }
@@ -337,7 +337,7 @@ private:
       ast.simplify(toget, eqs);
       return ast[toget];
     } else {
-      throw NotFound("Did not find the variables for storage element");
+      throw NotFound("Did not find the variables for storage/output element");
     }
   }
 
