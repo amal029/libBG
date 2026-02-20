@@ -23,7 +23,19 @@ struct Util {
 };
 
 // The type of components that are allowed in the Bond Graph
-enum class ComponentType : std::uint8_t { C = 0, L, R, SE, SF, GY, TF, J0, J1 };
+enum class ComponentType : std::uint8_t {
+  C = 0,
+  L,
+  R,
+  SE,
+  SF,
+  GY,
+  TF,
+  J0,
+  J1,
+  I,
+  O
+};
 
 // The different types of causality
 enum class Causality : int { Flow = 0, Effort, ACausal };
@@ -106,6 +118,16 @@ template <ComponentType T> struct Component {
     assert(i < ports.size());
     return &ports[i];
   }
+  constexpr std::vector<Port *> getPortWithType(PortType p) {
+    std::vector<Port *> toret;
+    toret.reserve(ports.size());
+    for (size_t i = 0; i < ports.size(); ++i) {
+      if (ports[i].getPortType() == p) {
+        toret.emplace_back(&ports[i]);
+      }
+    }
+    return toret;
+  }
   constexpr Port *getPortWithNeighbourID(size_t nid) {
     Port *toret = nullptr;
     for (size_t i = 0; i < ports.size(); ++i) {
@@ -131,6 +153,7 @@ template <ComponentType T> struct Component {
   constexpr bool getDeleted() const { return deleted; }
   constexpr const std::string &getValue() const { return value; }
 
+  // XXX: This can be seriously simplified
   constexpr void assignPortName() {
     if constexpr (T == ComponentType::SE) {
       assert(ports.size() == 1);
@@ -200,7 +223,8 @@ template <ComponentType T> struct Component {
       } else {
         throw NotFound(std::format("Component {} not assigned causality", ID));
       }
-    } else if constexpr (T == ComponentType::J0 || T == ComponentType::J1) {
+    } else if constexpr (T == ComponentType::J0 || T == ComponentType::J1 ||
+                         T == ComponentType::I || T == ComponentType::O) {
       for (size_t i = 0; i < ports.size(); ++i) {
         if (ports[i].getInCausality() == Causality::Flow) {
           ports[i].setInCausalName("f_" + std::to_string(ID) + "_" +
@@ -251,9 +275,24 @@ template <ComponentType T> struct Component {
   constexpr const std::string &getInternalName() const { return internal; }
   constexpr std::string &getInternalName() { return internal; }
 
+  // Getting the equation for the output component
+  [[nodiscard]]
+  constexpr const expression_t &getOutput(expressionAst &ast) const {
+    static_assert(T == ComponentType::O,
+                  "Can get output only from an output component");
+    if constexpr (T == ComponentType::O) {
+      std::vector<Port *> pp = getPortWithType(PortType::IN);
+      std::string_view ss = pp[0]->getInCausalName();
+      std::vector<size_t> eqs = ast.getEQ();
+      return pr_getStateEq(ast, ss, eqs);
+    }
+  }
+
   // Get the state equation for the given component
   [[nodiscard]]
   constexpr const expression_t &getStateEq(expressionAst &ast) const {
+    static_assert(T == ComponentType::L || T == ComponentType::C,
+                  "Only C/L are storage components");
     if constexpr (T == ComponentType::L) {
       const Port *p = getPort(0);
       std::vector<size_t> eqs = ast.getEQ();
@@ -276,8 +315,6 @@ template <ComponentType T> struct Component {
         std::string_view ss = p->getInCausalName();
         return pr_getStateEq(ast, ss, eqs);
       }
-    } else {
-      throw NotFound("State equations only exist for storage-elements L/C");
     }
   }
 
@@ -297,12 +334,8 @@ private:
       }
     }
     if (toget != 0) {
-      // print_expression_t(std::cout, ast[toget], ast);
-      // std::cout << "\n";
       ast.simplify(toget, eqs);
       return ast[toget];
-      // print_expression_t(std::cout, ast[toget], ast);
-      // std::cout << "\n";
     } else {
       throw NotFound("Did not find the variables for storage element");
     }
@@ -325,7 +358,8 @@ using componentVariant =
                  Component<ComponentType::J0> *, Component<ComponentType::J1> *,
                  Component<ComponentType::R> *, Component<ComponentType::SE> *,
                  Component<ComponentType::SF> *, Component<ComponentType::GY> *,
-                 Component<ComponentType::TF> *>;
+                 Component<ComponentType::TF> *, Component<ComponentType::I> *,
+                 Component<ComponentType::O> *>;
 
 // The hash required to make a map of Component pointers
 struct ComponentHash {
@@ -392,6 +426,12 @@ static std::ostream &operator<<(std::ostream &os, const ComponentType &c) {
     break;
   case ComponentType::TF:
     os << "Transformer";
+    break;
+  case ComponentType::I:
+    os << "Input";
+    break;
+  case ComponentType::O:
+    os << "Output";
     break;
   }
   return os;

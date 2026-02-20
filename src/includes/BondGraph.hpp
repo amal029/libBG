@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Component.hpp"
+#include "exception.hpp"
 #include "expression.hpp"
 #include <algorithm>
 #include <cassert>
@@ -13,16 +14,6 @@
 #include <stdexcept>
 #include <variant>
 #include <vector>
-
-#define DEBUG(i)                                                               \
-  do {                                                                         \
-    std::visit([](const auto &x) { std::cout << x << "\n"; },                  \
-               getComponentAt(i));                                             \
-  } while (0)
-
-#define DEBUG_COMPONENT(x) (std::cout << (x) << "\n")
-
-#define DEBUG_EXP(x) (std::cout << (x) << "\n")
 
 struct BondGraph {
   // Public methods
@@ -292,6 +283,7 @@ private:
   void addToSpace(expressionAst &space, Component<ComponentType::C> &x) const {
     assert(x.portSize() == 1);
     Port *inport = x.getPort(0);
+    assert(inport->getPortType() == PortType::IN);
     const std::string &vstr = x.getValue();
     bool isIntegral = inport->getOutCausality() == Causality::Effort;
     std::string &internal = x.getInternalName();
@@ -300,6 +292,7 @@ private:
   void addToSpace(expressionAst &space, Component<ComponentType::L> &x) const {
     assert(x.portSize() == 1);
     Port *inport = x.getPort(0);
+    assert(inport->getPortType() == PortType::IN);
     const std::string &vstr = x.getValue();
     bool isIntegral = inport->getOutCausality() == Causality::Flow;
     std::string &internal = x.getInternalName();
@@ -344,11 +337,13 @@ private:
 
   constexpr void addToSpace(expressionAst &space,
                             Component<ComponentType::TF> &x) {
-    assert(x.portSize() == 2);
-    Port *inport = x.getPort(0);
-    assert(inport->getPortType() == PortType::IN);
-    Port *outport = x.getPort(1);
-    assert(outport->getPortType() == PortType::OUT);
+    std::vector<Port *> inports = x.getPortWithType(PortType::IN);
+    assert(inports.size() == 1);
+    Port *inport = inports[0];
+    std::vector<Port *> outports = x.getPortWithType(PortType::OUT);
+    assert(outports.size() == 1);
+    Port *outport = outports[0];
+
     assert((inport->getOutCausality() == Causality::Effort &&
             outport->getOutCausality() == Causality::Flow) ||
            (inport->getOutCausality() == Causality::Flow &&
@@ -361,10 +356,12 @@ private:
   constexpr void addToSpace(expressionAst &space,
                             Component<ComponentType::GY> &x) {
     assert(x.portSize() == 2);
-    Port *inport = x.getPort(0);
-    assert(inport->getPortType() == PortType::IN);
-    Port *outport = x.getPort(1);
-    assert(outport->getPortType() == PortType::OUT);
+    std::vector<Port *> inports = x.getPortWithType(PortType::IN);
+    assert(inports.size() == 1);
+    Port *inport = inports[0];
+    std::vector<Port *> outports = x.getPortWithType(PortType::OUT);
+    assert(outports.size() == 1);
+    Port *outport = outports[0];
     assert((inport->getOutCausality() == Causality::Effort &&
             outport->getOutCausality() == Causality::Effort) ||
            (inport->getOutCausality() == Causality::Flow &&
@@ -435,7 +432,7 @@ private:
         others.push_back(pp);
       }
     }
-    assert(others.size() >= 2);
+    // assert(others.size() >= 2);
     assert(mainPort->getOutCausality() == Causality::Flow);
     addToSpaceJ0J1(space, mainPort, others);
     // Now set the equality constraints for all the other outputs
@@ -455,7 +452,7 @@ private:
         others.push_back(pp);
       }
     }
-    assert(others.size() >= 2);
+    // assert(others.size() >= 2);
     assert(mainPort->getOutCausality() == Causality::Effort);
     addToSpaceJ0J1(space, mainPort, others);
     // Now set the equality constraints for all the other outputs
@@ -478,6 +475,54 @@ private:
     }
     size_t res = space.append(Symbol{inport->getOutCausalName()});
     res = space.append(Expression<EOP::EQ>{res, out});
+  }
+  constexpr void addToSpace(expressionAst &space,
+                            Component<ComponentType::O> &x) {
+    assert(x.portSize() == 1 || x.portSize() == 2);
+    if (x.portSize() == 2) {
+      // Then output should be equal to the input
+      std::vector<Port *> inports = x.getPortWithType(PortType::IN);
+      assert(inports.size() == 1);
+      Port *inport = inports[0];
+      std::vector<Port *> outports = x.getPortWithType(PortType::OUT);
+      assert(outports.size() == 1);
+      Port *outport = outports[0];
+      size_t in_index = space.append(Symbol{inport->getInCausalName()});
+      size_t out_index = space.append(Symbol{outport->getOutCausalName()});
+      size_t _ = space.append(Expression<EOP::EQ>{out_index, in_index});
+      in_index = space.append(Symbol{inport->getOutCausalName()});
+      out_index = space.append(Symbol{outport->getInCausalName()});
+      _ = space.append(Expression<EOP::EQ>{in_index, out_index});
+      OutputsEqualInputs(space, x);
+    } else {
+      throw PortIndexOutofBounds(
+          std::format("Output component {} has more than 2 ports", x.getID()));
+    }
+  }
+  constexpr void addToSpace(expressionAst &space,
+                            Component<ComponentType::I> &x) {
+    assert(x.portSize() == 1 || x.portSize() == 2);
+    if (x.portSize() == 2) {
+      // Then the output should be equal to the input
+      std::vector<Port *> inports = x.getPortWithType(PortType::IN);
+      assert(inports.size() == 1);
+      Port* inport = inports[0];
+      std::vector<Port *> outports = x.getPortWithType(PortType::OUT);
+      assert(outports.size() == 1);
+      Port *outport = outports[0];
+      size_t in_index = space.append(Symbol{inport->getInCausalName()});
+      size_t out_index = space.append(Symbol{outport->getOutCausalName()});
+      size_t _ = space.append(Expression<EOP::EQ>{out_index, in_index});
+      in_index = space.append(Symbol{inport->getOutCausalName()});
+      out_index = space.append(Symbol{outport->getInCausalName()});
+      _ = space.append(Expression<EOP::EQ>{in_index, out_index});
+    } else {
+      throw PortIndexOutofBounds(
+          std::format("Input {} has more than 2 ports!", x.getID()));
+    }
+    // XXX: Here what ever happens the output port should always be
+    // assigned to the neighbour.
+    OutputsEqualInputs(space, x);
   }
 
   // There the causality is that of the output port
@@ -685,6 +730,59 @@ private:
     assignGYTFSourceOutoingCausality(myId, out, in, true);
   }
 
+  // XXX: This needs to propagate the causality further
+  void componentAssignAndPropagateIO(
+      size_t myId, Port *myPort, Port *pPort, size_t pid,
+      const std::vector<const Port *> &parentPortsAssigned,
+      ComponentType pType) {
+
+    auto integralCausality = [&]() {
+      assignCausality(myPort, pPort, Causality::Effort, Causality::Flow);
+    };
+
+    auto diffCausality = [&]() {
+      assignCausality(myPort, pPort, Causality::Flow, Causality::Effort);
+    };
+
+    Causality in, out;
+
+    // If the parent junction is J0 and assigned an input effort then I
+    // will give a flow out, else error
+    if (pType == ComponentType::J0) {
+      if (isAssignedCausality(Causality::Effort, parentPortsAssigned)) {
+        diffCausality();
+        out = Causality::Effort;
+        in = Causality::Flow;
+      } else
+        throw JunctionAssignment(
+            std::format("Cannot assign causality to {}, since parent junction "
+                        "is not assigned correct causality",
+                        myId));
+    }
+
+    // If the parent junction is J1 and given an input flow then I will
+    // give an effort out, else error
+    if (pType == ComponentType::J1) {
+      if (isAssignedCausality(Causality::Flow, parentPortsAssigned)) {
+        integralCausality();
+        out = Causality::Flow;
+        in = Causality::Effort;
+      } else
+        throw JunctionAssignment(
+            std::format("Cannot assign causality to {}, since parent junction "
+                        "is not assigned correct causality",
+                        myId));
+    }
+    // Here we need to propagate the causality further.
+    if (edges[myId].size() == 1)
+      assignGYTFSourceOutoingCausality(myId, out, in, true);
+    else if (edges[myId].size() > 1) {
+      throw InCorrectComponentConnection(std::format(
+          "I/O component {} not connected to correct number of components",
+          myId));
+    }
+  }
+
   void componentAssignAndPropagateR(
       size_t myId, Port *myPort, Port *pPort, size_t pid,
       const std::vector<const Port *> &parentPortsAssigned,
@@ -761,6 +859,16 @@ private:
     std::vector<Port *> jports;
     std::vector<Port *> myjports;
 
+    // Input ports
+    std::vector<size_t> is;
+    std::vector<Port *> iports;
+    std::vector<Port *> myiports;
+
+    // Output ports
+    std::vector<size_t> os;
+    std::vector<Port *> oports;
+    std::vector<Port *> myoports;
+
     ComponentType myType = std::visit(
         [](const auto &x) { return x->getType(); }, getComponentAt(id));
 
@@ -800,6 +908,18 @@ private:
           tfs.push_back(x);
           tfports.push_back(nport);
           mytfports.push_back(myPort);
+          break;
+        }
+        case ComponentType::I: {
+          is.push_back(x);
+          iports.push_back(nport);
+          myiports.push_back(myPort);
+          break;
+        }
+        case ComponentType::O: {
+          os.push_back(x);
+          oports.push_back(nport);
+          myoports.push_back(myPort);
           break;
         }
         case ComponentType::R: {
@@ -861,6 +981,20 @@ private:
       componentAssignAndPropagateR(rs[i], rports[i], myRports[i], id,
                                    assignedPorts, myType);
       assignedPorts.push_back(myRports[i]);
+    }
+
+    // Now we assign causality to inputs
+    for (size_t i = 0; i < is.size(); ++i) {
+      componentAssignAndPropagateIO(is[i], iports[i], myiports[i], id,
+                                    assignedPorts, myType);
+      assignedPorts.push_back(myiports[i]);
+    }
+
+    // Now we assign causality to outputs
+    for (size_t i = 0; i < os.size(); ++i) {
+      componentAssignAndPropagateIO(os[i], oports[i], myoports[i], id,
+                                    assignedPorts, myType);
+      assignedPorts.push_back(myoports[i]);
     }
 
     // Now check that every port in this junction is assigned and check
