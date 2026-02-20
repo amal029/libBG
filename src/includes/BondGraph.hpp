@@ -123,6 +123,12 @@ struct BondGraph {
     std::vector<size_t> sources;
     getSources(sources); // These are all the sources
 
+    // XXX: This handles the case where there are no sources, but only
+    // inputs and outputs.
+    if (sources.empty()) {
+      throw NotFound(
+          "Not source in the Bond Graph to perform causality analysis\n");
+    }
     // There can be only a single output for a given source
     for (const auto &s : sources) {
       Causality in, out;
@@ -910,6 +916,7 @@ private:
           mytfports.push_back(myPort);
           break;
         }
+          // XXX: Can this happen, because it is an input??
         case ComponentType::I: {
           is.push_back(x);
           iports.push_back(nport);
@@ -970,17 +977,18 @@ private:
                                     assignedPorts, myType);
       assignedPorts.push_back(mytfports[i]);
     }
-    // Now assign the junction ports
-    for (size_t i = 0; i < js.size(); ++i) {
-      componentAssignAndPropagateJ(js[i], jports[i], myjports[i], id,
-                                   assignedPorts, myType);
-      assignedPorts.push_back(myjports[i]);
-    }
     // Now we assign causality to rs.
     for (size_t i = 0; i < rs.size(); ++i) {
       componentAssignAndPropagateR(rs[i], rports[i], myRports[i], id,
                                    assignedPorts, myType);
       assignedPorts.push_back(myRports[i]);
+    }
+    
+    // Now assign the junction ports
+    for (size_t i = 0; i < js.size(); ++i) {
+      componentAssignAndPropagateJ(js[i], jports[i], myjports[i], id,
+                                   assignedPorts, myType);
+      assignedPorts.push_back(myjports[i]);
     }
 
     // Now we assign causality to inputs
