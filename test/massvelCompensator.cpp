@@ -113,7 +113,7 @@ int main(void) {
   // Now just plot the thing
   const double m = 20;
   const double tau = 1.3;
-  const double obs_tau = 200;
+  const double obs_tau = 20;
 
   component_map_t<double> consts;
   consts[&se] = 0;              // dummy input for effort

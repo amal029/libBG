@@ -314,6 +314,7 @@ struct expressionAst {
       Symbol *torepsym = (Symbol *)&arena[*torep];
       // Go through the eqs
       size_t counter = 0;
+      bool added = false;
       for (size_t jj : eqs) {
         Expression<EOP::EQ> *x = std::get_if<Expression<EOP::EQ>>(&arena[jj]);
         assert(x != nullptr);
@@ -329,17 +330,22 @@ struct expressionAst {
           if (getNonConstSymbols(*torep, q)) {
             q.push(torep);
           }
+          added = true;
           break;
         } else if (eqls == nullptr) {
           x->print_expr(std::cerr, *this);
           std::cerr << "\n";
           throw std::runtime_error("Left side of equality is not a symbol");
-        } else if (eqls != nullptr && torepsym->getName() != eqls->getName()) {
-          // Just reset the visited vector
-          for (size_t k = 0; k < visited.size(); ++k)
-            visited[k] = false;
         }
         ++counter;
+      }
+      // FIXME: This is not completely correct, because we should only
+      // be removing visited whose eqs (indices) do not have any parts
+      // of their (right side) expression left in the stack.
+      if (!added) {
+        // Just reset the visited vector
+        for (size_t k = 0; k < visited.size(); ++k)
+          visited[k] = false;
       }
     }
   }
