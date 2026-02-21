@@ -51,7 +51,7 @@ void integrate(Solver<double> &s) {
   double tspan[2] = {0, TSTOP};
   double initial[M] = {0.1};
   euler(toIntegrate, tspan, initial, N, M, t, xv.data());
-  std::ofstream file("/tmp/test3.csv");
+  std::ofstream file("/tmp/test4.csv");
   assert(file.is_open());
   file << "Time(sec), Velocity (m/sec)\n";
   for (size_t j = 0; j < N + 1; ++j) {

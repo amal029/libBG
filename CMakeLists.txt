@@ -56,7 +56,6 @@ target_compile_options(ccontrol PRIVATE ${CXX_FLAGS})
 add_executable(mvpcontrol ../test/massvelocityPcontrol.cpp ${THIRD_PARTY_SRCS})
 
 # The include directory
-# target_include_directories(RLClowpass PRIVATE ${INCLUDES} ${GINAC_INCLUDE_DIRS})
 target_include_directories(mvpcontrol PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
 
 target_compile_options(mvpcontrol PRIVATE ${CXX_FLAGS})
