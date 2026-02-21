@@ -105,7 +105,6 @@ int main(void) {
   bg.simplify();
   // Causality analysis
   bg.assignCausality();
-  // std::cout << bg << "\n";
   // State space representation
   expressionAst ast = bg.generateStateSpace();
   // Print the storage elements

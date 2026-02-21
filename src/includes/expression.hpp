@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <iostream>
 #include <ostream>
-#include <queue>
+#include <stack>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -38,7 +38,7 @@ struct Number {
   constexpr explicit Number(double n) : num(n) {}
   Number(const Number &) = delete;
   Number(Number &&) = default;
-  bool pushSymbol(std::queue<size_t *> &, std::vector<expression_t> &) {
+  bool pushSymbol(std::stack<size_t *> &, std::vector<expression_t> &) {
     return false;
   }
   template <NumericType T>
@@ -67,7 +67,7 @@ struct Symbol {
       : name(n), isConst(isC) {}
   Symbol(const Symbol &) = delete;
   Symbol(Symbol &&) = default;
-  bool pushSymbol(std::queue<size_t *> &, std::vector<expression_t> &_) {
+  bool pushSymbol(std::stack<size_t *> &, std::vector<expression_t> &_) {
     return (!isConst);
   }
   template <NumericType T>
@@ -160,7 +160,7 @@ template <EOP op> struct Expression {
     return false;
   }
 
-  bool pushSymbol(std::queue<size_t *> &q, std::vector<expression_t> &arena) {
+  bool pushSymbol(std::stack<size_t *> &q, std::vector<expression_t> &arena) {
     bool res = std::visit([&](auto &x) { return x.pushSymbol(q, arena); },
                           arena[left]);
     if constexpr (op != EOP::EQ) {
@@ -282,7 +282,7 @@ struct expressionAst {
     return toret;
   }
   // Function that collects the non-const symbols from a given expression
-  bool getNonConstSymbols(size_t expr, std::queue<size_t *> &q) {
+  bool getNonConstSymbols(size_t expr, std::stack<size_t *> &q) {
     return std::visit([&](auto &x) { return x.pushSymbol(q, arena); },
                       arena[expr]);
   }
@@ -294,7 +294,8 @@ struct expressionAst {
 
   // Simplification algorithm
   void simplify(size_t eq_index, const std::vector<size_t> &eqs) {
-    std::queue<size_t *> q;
+    std::stack<size_t *> q;
+    // std::queue<size_t *> q;
     Expression<EOP::EQ> *res =
         std::get_if<Expression<EOP::EQ>>(&arena[eq_index]);
     if (res != nullptr) {
@@ -304,9 +305,8 @@ struct expressionAst {
     }
     std::vector<bool> visited;
     visited.resize(eqs.size());
-    // Set the current equality to true
     while (!q.empty()) {
-      size_t *torep = q.front();
+      size_t *torep = q.top();
       q.pop();
       // Now get EQ with the left side equal to this symbol
       T t = std::visit([](const auto &x) { return x.getT(); }, arena[*torep]);
@@ -319,13 +319,11 @@ struct expressionAst {
         assert(x != nullptr);
         Symbol *eqls = std::get_if<Symbol>(&arena[x->getLeft()]);
         if (eqls != nullptr && torepsym->getName() == eqls->getName()) {
-          // FIXME: This needs to be checked, when is something an algebraic
-          // loop? 
-          // if (visited[counter]) {
-          //   x->print_expr(std::cerr, *this);
-          //   std::cerr << "\n";
-          //   throw std::runtime_error("Algebraic Loop");
-          // }
+          if (visited[counter]) {
+            x->print_expr(std::cerr, *this);
+            std::cerr << "\n";
+            throw std::runtime_error("Algebraic Loop");
+          }
           visited[counter] = true;
           *torep = x->getRight(); // replaced
           if (getNonConstSymbols(*torep, q)) {
@@ -336,6 +334,10 @@ struct expressionAst {
           x->print_expr(std::cerr, *this);
           std::cerr << "\n";
           throw std::runtime_error("Left side of equality is not a symbol");
+        } else if (eqls != nullptr && torepsym->getName() != eqls->getName()) {
+          // Just reset the visited vector
+          for (size_t k = 0; k < visited.size(); ++k)
+            visited[k] = false;
         }
         ++counter;
       }
