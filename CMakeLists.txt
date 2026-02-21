@@ -42,6 +42,25 @@ target_compile_options(RLClowpass PRIVATE ${CXX_FLAGS})
 # target_link_directories(test1 PRIVATE ${GINAC_LIBRARY_DIRS})
 # target_link_libraries(test1 PRIVATE ${GINAC_LIBRARIES})
 
+#-------------Test executables from here (Compensator controller)------------------
+# Add executable target with source files listed in SOURCE_FILES variable
+add_executable(ccontrol ../test/massvelCompensator.cpp ${THIRD_PARTY_SRCS})
+
+# The include directory
+target_include_directories(ccontrol PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
+target_compile_options(ccontrol PRIVATE ${CXX_FLAGS})
+
+
+#------------------------Test executables from here (P controller)------------------
+# Add executable target with source files listed in SOURCE_FILES variable
+add_executable(mvpcontrol ../test/massvelocityPcontrol.cpp ${THIRD_PARTY_SRCS})
+
+# The include directory
+# target_include_directories(RLClowpass PRIVATE ${INCLUDES} ${GINAC_INCLUDE_DIRS})
+target_include_directories(mvpcontrol PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
+
+target_compile_options(mvpcontrol PRIVATE ${CXX_FLAGS})
+
 #--------------------------Test 2--------------------------------------
 # The second test
 # Add executable target with source files listed in SOURCE_FILES variable

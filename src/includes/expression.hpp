@@ -319,11 +319,13 @@ struct expressionAst {
         assert(x != nullptr);
         Symbol *eqls = std::get_if<Symbol>(&arena[x->getLeft()]);
         if (eqls != nullptr && torepsym->getName() == eqls->getName()) {
-          if (visited[counter]) {
-            x->print_expr(std::cerr, *this);
-            std::cerr << "\n";
-            throw std::runtime_error("Algebraic Loop");
-          }
+          // FIXME: This needs to be checked, when is something an algebraic
+          // loop? 
+          // if (visited[counter]) {
+          //   x->print_expr(std::cerr, *this);
+          //   std::cerr << "\n";
+          //   throw std::runtime_error("Algebraic Loop");
+          // }
           visited[counter] = true;
           *torep = x->getRight(); // replaced
           if (getNonConstSymbols(*torep, q)) {

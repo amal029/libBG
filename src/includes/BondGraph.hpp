@@ -239,7 +239,8 @@ private:
   }
 
   template <ComponentType T> void simplify1(Component<T> &x) {
-    if constexpr (T == ComponentType::J0 || T == ComponentType::J1) {
+    if constexpr (T == ComponentType::J0 || T == ComponentType::J1 ||
+                  T == ComponentType::O || T == ComponentType::I) {
       if (canElimJunction(x)) {
         elimJunction(x);
       }
@@ -247,7 +248,8 @@ private:
   }
 
   template <ComponentType T> void simplify2(Component<T> &x) {
-    if constexpr (T == ComponentType::J0 || T == ComponentType::J1) {
+    if constexpr (T == ComponentType::J0 || T == ComponentType::J1 ||
+                  T == ComponentType::O || T == ComponentType::I) {
       if (canContractJunction(x)) {
         contractJunction(x);
       }
