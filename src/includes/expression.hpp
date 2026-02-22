@@ -339,9 +339,9 @@ struct expressionAst {
         }
         ++counter;
       }
-      // FIXME: This is not completely correct, because we should only
-      // be removing visited whose eqs (indices) do not have any parts
-      // of their (right side) expression left in the stack.
+      // XXX: This may not be completely correct/solid, because we
+      // should only be removing visited whose eqs (indices) do not have
+      // any parts of their (right side) expression left in the stack.
       if (!added) {
         // Just reset the visited vector
         for (size_t k = 0; k < visited.size(); ++k)

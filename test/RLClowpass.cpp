@@ -87,6 +87,7 @@ int main() {
   print_state_eqns(c.getStateEq(ast), "C", ast);
 
   // Set the constant value
+  // XXX: These should be expression types
   component_map_t<double> consts;
   consts[&se] = 24;
   consts[&c] = 1e-3;
