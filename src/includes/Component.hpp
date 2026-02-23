@@ -10,6 +10,7 @@
 #include <format>
 #include <iostream>
 #include <ostream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -109,6 +110,7 @@ template <ComponentType T, Modulated m = Modulated::F> struct Component {
   constexpr const char *getName() const { return name; }
   constexpr size_t getID() const { return ID; }
   constexpr ComponentType getType() const { return myT; }
+  constexpr Modulated getModulated() const { return modulatedT; }
   constexpr size_t portSize() const { return ports.size(); }
   constexpr std::vector<Port>::iterator portBegin() { return ports.begin(); }
   constexpr std::vector<Port>::iterator portEnd() { return ports.end(); }
@@ -154,6 +156,57 @@ template <ComponentType T, Modulated m = Modulated::F> struct Component {
   constexpr void setDeleted() { deleted = true; }
   constexpr bool getDeleted() const { return deleted; }
   constexpr const std::string &getValue() const { return value; }
+
+  // XXX: These should be only for non junctions
+  constexpr std::string_view getEffort() const {
+    if constexpr (T == ComponentType::C || T == ComponentType::L ||
+                  T == ComponentType::R || T == ComponentType::SE ||
+                  T == ComponentType::SF) {
+      // Get the input port
+      return getEffortFlow(Causality::Effort);
+    } else if constexpr (T == ComponentType::O) {
+      if (portSize() != 1) {
+        throw std::runtime_error(std::format(
+            "Cannot get effort of connected  component {}", getID()));
+      } else {
+        return getEffortFlow(Causality::Effort);
+      }
+    } else if constexpr (T == ComponentType::I) {
+      if (portSize() != 1) {
+        throw std::runtime_error(std::format(
+            "Cannot get effort of connected component {}", getID()));
+      } else {
+        return getEffortFlow(Causality::Effort);
+      }
+    } else
+      throw std::runtime_error(
+          std::format("Cannot get effort and flow of component {}", getID()));
+  }
+  // get the flow variable
+  constexpr std::string_view getFlow() const {
+    if constexpr (T == ComponentType::C || T == ComponentType::L ||
+                  T == ComponentType::R || T == ComponentType::SE ||
+                  T == ComponentType::SF) {
+      // Get the input port
+      return getEffortFlow(Causality::Flow);
+    } else if constexpr (T == ComponentType::O) {
+      if (portSize() != 1) {
+        throw std::runtime_error(std::format(
+            "Cannot get effort of connected  component {}", getID()));
+      } else {
+        return getEffortFlow(Causality::Flow);
+      }
+    } else if constexpr (T == ComponentType::I) {
+      if (portSize() != 1) {
+        throw std::runtime_error(std::format(
+            "Cannot get effort of connected component {}", getID()));
+      } else {
+        return getEffortFlow(Causality::Flow);
+      }
+    } else
+      throw std::runtime_error(
+          std::format("Cannot get effort and flow of component {}", getID()));
+  }
 
   // XXX: This can be seriously simplified
   constexpr void assignPortName() {
@@ -321,6 +374,16 @@ template <ComponentType T, Modulated m = Modulated::F> struct Component {
   }
 
 private:
+  constexpr std::string_view getEffortFlow(Causality c) const {
+    Port *p = getPort(0);
+    if (p->getOutCausality() == Causality::ACausal) {
+      throw std::runtime_error(
+          std::format("Causality not assigned for component {}", getID()));
+    } else if (p->getOutCausality() == c) {
+      return p->getOutCausalName();
+    } else
+      return p->getInCausalName();
+  }
   constexpr const expression_t &pr_getStateEq(expressionAst &ast,
                                               std::string_view ss,
                                               std::vector<size_t> &eqs) const {
@@ -350,6 +413,7 @@ private:
   std::string internal; // For C and L type components
   size_t ID;            // The unique ID generated internally for each component
   ComponentType myT;
+  Modulated modulatedT = m;
   bool deleted = false; // Has this been deleted from the graph
                         // during simplification.
 };

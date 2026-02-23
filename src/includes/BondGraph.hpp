@@ -12,6 +12,7 @@
 #include <numeric>
 #include <ostream>
 #include <stdexcept>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -133,6 +134,21 @@ struct BondGraph {
     auto visitorContract = [&](auto &x) { simplify2(*x); };
     dfs(sources, visitorContract);
   }
+
+  template <ComponentType T, Modulated M>
+  void signal2ModulatedComponent(std::string_view v, Component<T, M> &x) {
+    static_assert(M == Modulated::T,
+                  "Signals can only influence modulated components");
+    // TODO: Fill this in
+  }
+  template <ComponentType T> void component2Signal() {
+    static_assert((T != ComponentType::J0 && T != ComponentType::J1 &&
+                   T != ComponentType::GY && T != ComponentType::TF),
+                  "Cannot convert non terminal components to signals");
+    // TODO: Fill this in.
+  }
+
+  // This function assigns causality
   void assignCausality() {
     // First get all the sources
     std::vector<size_t> sources;
@@ -168,10 +184,6 @@ struct BondGraph {
     for (const auto &s : sources) {
       junctionPropagate(edges[s][0]);
     }
-
-    // Here do a dfs of the graph and for each port give it a name
-    auto visitor = [](auto &x) { x->assignPortName(); };
-    dfs(sources, visitor);
 
     // XXX: Here we should also assign causality using the input and
     // outputs. Inputs and outputs that are not connected to anything,
@@ -211,6 +223,9 @@ struct BondGraph {
       if (inPorts == 0 && outPorts == 1)
         junctionPropagate(edges[j][0]);
     }
+    // Here do a dfs of the graph and for each port give it a name
+    auto visitor = [](auto &x) { x->assignPortName(); };
+    dfs(sources, visitor);
 
     // Check the causality
     checkCausalAssignment();
