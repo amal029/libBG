@@ -37,6 +37,8 @@ enum class ComponentType : std::uint8_t {
   O
 };
 
+enum class Modulated { F = 0, T = 1 };
+
 // The different types of causality
 enum class Causality : int { Flow = 0, Effort, ACausal };
 
@@ -92,7 +94,7 @@ private:
 };
 
 // The common Component class
-template <ComponentType T> struct Component {
+template <ComponentType T, Modulated m = Modulated::F> struct Component {
   constexpr Component() {} // This is for Bond Graph insertion
   constexpr Component(const char *n) : name(n), ID(Util::getID()), myT(T) {
     value = (name + std::string("_") + std::to_string(ID));

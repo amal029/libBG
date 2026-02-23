@@ -86,6 +86,21 @@ struct BondGraph {
     }
   }
 
+  // Get the outputs
+  void getIOs(std::vector<size_t> &outputs, std::vector<size_t> &inputs) const {
+    using outputs_t = Component<ComponentType::O> *;
+    using inputs_t = Component<ComponentType::I> *;
+
+    for (size_t i = 0; i < getNumComponents(); ++i) {
+      auto &vv = getComponentAt(i);
+      if (std::holds_alternative<outputs_t>(vv)) {
+        outputs.push_back(std::get<outputs_t>(vv)->getID());
+      } else if (std::holds_alternative<inputs_t>(vv)) {
+        outputs.push_back(std::get<inputs_t>(vv)->getID());
+      }
+    }
+  }
+
   // DFS traverse the graph from the sources and apply a function to each of the
   // node
   template <typename Callable, bool PRE = true>
@@ -157,6 +172,46 @@ struct BondGraph {
     // Here do a dfs of the graph and for each port give it a name
     auto visitor = [](auto &x) { x->assignPortName(); };
     dfs(sources, visitor);
+
+    // XXX: Here we should also assign causality using the input and
+    // outputs. Inputs and outputs that are not connected to anything,
+    // i.e., only those that have a single output and input port,
+    // respectively.
+    std::vector<size_t> os;
+    std::vector<size_t> is;
+    getIOs(os, is);
+    for (size_t j : os) {
+      size_t inPorts = std::visit(
+          [&](const auto &x) {
+            return x->getPortWithType(PortType::IN).size();
+          },
+          getComponentAt(j));
+      size_t outPorts = std::visit(
+          [&](const auto &x) {
+            return x->getPortWithType(PortType::OUT).size();
+          },
+          getComponentAt(j));
+      // Only if the output has nothing going out
+      if (outPorts == 0 && inPorts == 1)
+        junctionPropagate(redges[j][0]);
+    }
+
+    for (size_t j : is) {
+      size_t inPorts = std::visit(
+          [&](const auto &x) {
+            return x->getPortWithType(PortType::IN).size();
+          },
+          getComponentAt(j));
+      size_t outPorts = std::visit(
+          [&](const auto &x) {
+            return x->getPortWithType(PortType::OUT).size();
+          },
+          getComponentAt(j));
+      // Only if the input has nothing coming in
+      if (inPorts == 0 && outPorts == 1)
+        junctionPropagate(edges[j][0]);
+    }
+
     // Check the causality
     checkCausalAssignment();
   }
@@ -1050,24 +1105,6 @@ private:
                                     assignedPorts, myType);
       assignedPorts.push_back(myoports[i]);
     }
-
-    // Now check that every port in this
-    // junction is assigned and check that constraints are satisfied.
-    // assignedPorts.clear();
-    // for (size_t i = 0; i < numPorts; ++i) {
-    //   const Port *p = std::visit([&i](const auto &x) { return x->getPort(i); },
-    //                              getComponentAt(id));
-    //   if (p->getAssigned()) {
-    //     assignedPorts.push_back(p);
-    //   }
-    // }
-    // if (assignedPorts.size() != numPorts) {
-    //   throw JunctionAssignment(
-    //       std::format("All of component {}' port not assigned", id));
-    // }
-    // // All constraints on this junction are satisfied
-    // std::visit([](const auto &x) { x->satisfyConstraints(); },
-    //            getComponentAt(id));
   }
 
   // This function gives the port of the id connected to parent ID (pid)
