@@ -11,14 +11,13 @@
 #include <iostream>
 #include <numeric>
 #include <ostream>
-#include <stdexcept>
 #include <string_view>
 #include <variant>
 #include <vector>
 
 struct BondGraph {
   // Public methods
-  BondGraph() {}
+  BondGraph(std::string &&name) : name(name) {}
   BondGraph(const BondGraph &) = delete;
   BondGraph(BondGraph &&) = default;
   BondGraph &operator=(const BondGraph &) = delete;
@@ -48,8 +47,8 @@ struct BondGraph {
   template <ComponentType X, ComponentType Y>
   void connect(Component<X> &in, Component<Y> &out) {
     static_assert(X == ComponentType::J0 || X == ComponentType::J1 ||
-                  Y == ComponentType::J0 ||
-                  Y == ComponentType::J1, "Can only connect to a Junction");
+                      Y == ComponentType::J0 || Y == ComponentType::J1,
+                  "Can only connect to a Junction");
     // First assign the port for the in and out
     in.addPort(Port(PortType::OUT, out.getID()));
     out.addPort(Port(PortType::IN, in.getID()));
@@ -133,23 +132,12 @@ struct BondGraph {
     // Contract junctions (step 2)
     auto visitorContract = [&](auto &x) { simplify2(*x); };
     dfs(sources, visitorContract);
+    isSimplified = isSimplified ? false : true;
   }
-
-  template <ComponentType T, Modulated M>
-  void signal2ModulatedComponent(std::string_view v, Component<T, M> &x) {
-    static_assert(M == Modulated::T,
-                  "Signals can only influence modulated components");
-    // TODO: Fill this in
-  }
-  template <ComponentType T> void component2Signal() {
-    static_assert((T != ComponentType::J0 && T != ComponentType::J1 &&
-                   T != ComponentType::GY && T != ComponentType::TF),
-                  "Cannot convert non terminal components to signals");
-    // TODO: Fill this in.
-  }
-
   // This function assigns causality
   void assignCausality() {
+    if (!isSimplified)
+      simplify();
     // First get all the sources
     std::vector<size_t> sources;
     getSources(sources); // These are all the sources
@@ -229,9 +217,11 @@ struct BondGraph {
 
     // Check the causality
     checkCausalAssignment();
+    isCausalityAssigned = isCausalityAssigned ? false : true;
   }
 
-  template <ComponentType T> void checkCausality(const Component<T> &x) const {
+  template <ComponentType T, Modulated M>
+  void checkCausality(const Component<T, M> &x) const {
     std::vector<bool> assigned;
     size_t numPorts = x.portSize();
     assigned.resize(numPorts, false);
@@ -271,6 +261,8 @@ struct BondGraph {
 
   // This will generate the state space system for the bond graph
   expressionAst generateStateSpace() {
+    if (!isCausalityAssigned)
+      assignCausality();
     expressionAst ast;
     // Get all the sources and move along the graph in dfs
     std::vector<size_t> sources;
@@ -291,7 +283,95 @@ struct BondGraph {
   void printEdges() { printEdges(edges); }
   void printReverseEdges() { printEdges(redges); }
 
+  template <typename V = double>
+  using component_map_t =
+      std::unordered_map<componentVariant, V, ComponentHash, ComponentEqual>;
+
+  // This generates the Modellica block/model
+  void generateModellica(expressionAst &ast, component_map_t<double> &&consts) {
+    // Get all the storage elements in the graph
+    std::vector<storageVariant> storageElements;
+    for (size_t i = 0; i < components.size(); ++i) {
+      Component<ComponentType::C> **x =
+          std::get_if<Component<ComponentType::C> *>(&components[i]);
+      if (x != nullptr) {
+        storageElements.emplace_back(*x);
+      }
+      Component<ComponentType::L> **y =
+          std::get_if<Component<ComponentType::L> *>(&components[i]);
+      if (y != nullptr) {
+        storageElements.emplace_back(*y);
+      }
+    }
+    replaceConsts(ast, std::move(consts), storageElements);
+    // DEBUG: print the outputs for state equations for a given example
+    for (const storageVariant &x : storageElements) {
+      std::visit(
+          [&](const auto &y) {
+            print_expression_t(std::cout, y->getStateEq(ast), ast);
+            std::cout << "\n";
+          },
+          x);
+    }
+    // Declare the storage element variables (these will be internal)
+    std::vector<std::string_view> storageNames =
+        getStorageNames(storageElements);
+    // Get all the names of the outputs and inputs that we have
+    std::vector<IO> moduldatedInputs;
+    std::vector<IO> signalOutputs;
+    for (size_t i = 0; i < components.size(); ++i) {
+      std::visit([&](const auto &x) { x->getModulated(moduldatedInputs); },
+                 components[i]);
+      std::visit([&](const auto &x) { x->getIO(signalOutputs); },
+                 components[i]);
+    }
+    // If the modulated and signalOutputs are empty then just make a
+    // model. Else make a block. I think the ast expression should have
+    // a deriv type explicitly instead of using "d" at the start.
+  }
+
 private:
+  // Gets the name of the storage elements
+  std::vector<std::string_view>
+  getStorageNames(std::vector<storageVariant> &storageElements) {
+    std::vector<std::string_view> toret;
+    toret.reserve(storageElements.size());
+    for (storageVariant &x : storageElements) {
+      const std::string &y =
+          std::visit([](const auto &x) { return x->getInternalName(); }, x);
+      toret.emplace_back(y.substr(1));
+    }
+    return toret;
+  }
+  void replaceConsts(expressionAst &ast, component_map_t<double> &&consts,
+                     const std::vector<storageVariant> &storageElements) {
+    consts_t<double> _consts;
+    _consts.reserve(consts.size());
+    // Convert the component -> value map to string -> value map
+    for (const auto &[k, v] : consts) {
+      std::string_view vv = std::visit(
+          [](const auto &x) -> std::string_view { return x->getValue(); }, k);
+      _consts[vv] = v;
+    }
+    for (const storageVariant &_comp : storageElements) {
+      const expression_t &ee = std::visit(
+          [&](auto &x) -> const expression_t & { return x->getStateEq(ast); },
+          _comp);
+      Expression<EOP::EQ> *_ee =
+          (Expression<EOP::EQ> *)std::get_if<Expression<EOP::EQ>>(&ee);
+      assert(_ee != nullptr);
+      bool res = ast.subs(_ee->getRight(), _consts);
+      if (res) {
+        // Then the right is guaranteed to be a symbol. Get the symbol from
+        // consts and get its value v.
+        const Symbol *torep = std::get_if<Symbol>(&ast[_ee->getRight()]);
+        assert(torep != nullptr);
+        // I do this before, because after append _ee might be invalidated.
+        _ee->setRight(ast.size()); // replace the right with the new number
+        size_t _ = ast.append(Number{_consts[torep->getName()]});
+      }
+    }
+  }
   void printEdges(std::vector<std::vector<size_t>> &edges) {
     std::cout << "[";
     for (size_t i = 0; i < edges.size(); ++i) {
@@ -308,7 +388,7 @@ private:
     std::cout << "]";
   }
 
-  template <ComponentType T> void simplify1(Component<T> &x) {
+  template <ComponentType T, Modulated M> void simplify1(Component<T, M> &x) {
     if constexpr (T == ComponentType::J0 || T == ComponentType::J1 ||
                   T == ComponentType::O || T == ComponentType::I) {
       if (canElimJunction(x)) {
@@ -317,7 +397,7 @@ private:
     }
   }
 
-  template <ComponentType T> void simplify2(Component<T> &x) {
+  template <ComponentType T, Modulated M> void simplify2(Component<T, M> &x) {
     if constexpr (T == ComponentType::J0 || T == ComponentType::J1 ||
                   T == ComponentType::O || T == ComponentType::I) {
       if (canContractJunction(x)) {
@@ -326,8 +406,8 @@ private:
     }
   }
 
-  template <ComponentType T>
-  constexpr void OutputsEqualInputs(expressionAst &space, Component<T> &x) {
+  template <ComponentType T, Modulated M>
+  constexpr void OutputsEqualInputs(expressionAst &space, Component<T, M> &x) {
     size_t myID = x.getID();
     for (size_t i = 0; i < edges[myID].size(); ++i) {
       Port *myOutPort = x.getPortWithNeighbourID(edges[myID][i]);
@@ -344,8 +424,9 @@ private:
       _ = space.append(Expression<EOP::EQ>{in_sym_index, out_sym_index});
     }
   }
+  template <Modulated M>
   constexpr void addToSpace(expressionAst &space,
-                            Component<ComponentType::SE> &x) {
+                            Component<ComponentType::SE, M> &x) {
     assert(x.portSize() == 1);
     Port *outport = x.getPort(0);
     assert(outport->getPortType() == PortType::OUT &&
@@ -356,8 +437,9 @@ private:
     size_t _ = space.append(Expression<EOP::EQ>{out_port_index, value_index});
     OutputsEqualInputs(space, x);
   }
+  template <Modulated M>
   constexpr void addToSpace(expressionAst &space,
-                            Component<ComponentType::SF> &x) {
+                            Component<ComponentType::SF, M> &x) {
     assert(x.portSize() == 1);
     Port *outport = x.getPort(0);
     assert(outport->getPortType() == PortType::OUT &&
@@ -398,7 +480,9 @@ private:
       return _;
     }
   }
-  void addToSpace(expressionAst &space, Component<ComponentType::C> &x) const {
+  template <Modulated M>
+  void addToSpace(expressionAst &space,
+                  Component<ComponentType::C, M> &x) const {
     assert(x.portSize() == 1);
     Port *inport = x.getPort(0);
     assert(inport->getPortType() == PortType::IN);
@@ -407,7 +491,9 @@ private:
     std::string &internal = x.getInternalName();
     size_t _ = addToSpaceCL(space, inport, isIntegral, vstr, internal);
   }
-  void addToSpace(expressionAst &space, Component<ComponentType::L> &x) const {
+  template <Modulated M>
+  void addToSpace(expressionAst &space,
+                  Component<ComponentType::L, M> &x) const {
     assert(x.portSize() == 1);
     Port *inport = x.getPort(0);
     assert(inport->getPortType() == PortType::IN);
@@ -453,8 +539,9 @@ private:
     }
   }
 
+  template <Modulated M>
   constexpr void addToSpace(expressionAst &space,
-                            Component<ComponentType::TF> &x) {
+                            Component<ComponentType::TF, M> &x) {
     std::vector<Port *> inports = x.getPortWithType(PortType::IN);
     assert(inports.size() == 1);
     Port *inport = inports[0];
@@ -471,8 +558,9 @@ private:
     OutputsEqualInputs(space, x);
   }
 
+  template <Modulated M>
   constexpr void addToSpace(expressionAst &space,
-                            Component<ComponentType::GY> &x) {
+                            Component<ComponentType::GY, M> &x) {
     assert(x.portSize() == 2);
     std::vector<Port *> inports = x.getPortWithType(PortType::IN);
     assert(inports.size() == 1);
@@ -536,8 +624,9 @@ private:
     }
     // mainPort->setOutExpression(res);
   }
+  template <Modulated M>
   constexpr void addToSpace(expressionAst &space,
-                            Component<ComponentType::J0> &x) {
+                            Component<ComponentType::J0, M> &x) {
     // First get the main port with out causality of Effort
     Port *mainPort = nullptr;
     std::vector<Port *> others;
@@ -556,8 +645,9 @@ private:
     // Now set the equality constraints for all the other outputs
     OutputsEqualInputs(space, x);
   }
+  template <Modulated M>
   constexpr void addToSpace(expressionAst &space,
-                            Component<ComponentType::J1> &x) {
+                            Component<ComponentType::J1, M> &x) {
     // First get the main port with out causality of Flow
     Port *mainPort = nullptr;
     std::vector<Port *> others;
@@ -576,8 +666,9 @@ private:
     // Now set the equality constraints for all the other outputs
     OutputsEqualInputs(space, x);
   }
+  template <Modulated M>
   constexpr void addToSpace(expressionAst &space,
-                            Component<ComponentType::R> &x) const {
+                            Component<ComponentType::R, M> &x) const {
     assert(x.portSize() == 1);
     Port *inport = x.getPort(0);
     assert(inport->getPortType() == PortType::IN);
@@ -594,8 +685,9 @@ private:
     size_t res = space.append(Symbol{inport->getOutCausalName()});
     res = space.append(Expression<EOP::EQ>{res, out});
   }
+  template <Modulated M>
   constexpr void addToSpace(expressionAst &space,
-                            Component<ComponentType::O> &x) {
+                            Component<ComponentType::O, M> &x) {
     assert(x.portSize() == 1 || x.portSize() == 2);
     if (x.portSize() == 2) {
       // Then output should be equal to the input
@@ -617,8 +709,9 @@ private:
           std::format("Output component {} has more than 2 ports", x.getID()));
     }
   }
+  template <Modulated M>
   constexpr void addToSpace(expressionAst &space,
-                            Component<ComponentType::I> &x) {
+                            Component<ComponentType::I, M> &x) {
     assert(x.portSize() == 1 || x.portSize() == 2);
     if (x.portSize() == 2) {
       // Then the output should be equal to the input
@@ -1155,7 +1248,8 @@ private:
   }
 
   // XXX: Find the matching junction for simplification
-  template <ComponentType T> constexpr bool canElimJunction(Component<T> &x) {
+  template <ComponentType T, Modulated M>
+  constexpr bool canElimJunction(Component<T, M> &x) {
     bool toret = false;
     size_t numPorts = x.portSize();
     if (numPorts == 2)
@@ -1166,7 +1260,8 @@ private:
     return toret;
   }
   // Eliminate the junction
-  template <ComponentType T> constexpr void elimJunction(Component<T> &x) {
+  template <ComponentType T, Modulated M>
+  constexpr void elimJunction(Component<T, M> &x) {
     size_t id = x.getID();
     size_t prevId = redges[id][0];
     size_t nextId = edges[id][0];
@@ -1199,8 +1294,8 @@ private:
   }
 
   // Contracting junctions
-  template <ComponentType T>
-  constexpr bool canContractJunction(Component<T> &component) {
+  template <ComponentType T, Modulated M>
+  constexpr bool canContractJunction(Component<T, M> &component) {
     size_t id = component.getID();
     // XXX: A junction with same type connected to another junction of
     // the same type.
@@ -1239,7 +1334,8 @@ private:
     }
   }
 
-  template <ComponentType T> void contractJunction(Component<T> &x) {
+  template <ComponentType T, Modulated M>
+  void contractJunction(Component<T, M> &x) {
     size_t id = x.getID();
     ComponentType mType = x.getType();
     size_t nid = 0;
@@ -1293,6 +1389,8 @@ private:
     if (!PRE)
       std::visit([&f](auto &x) { f(x); }, components[i]);
   }
+  // Name of this bond graph
+  std::string name;
 
   // The vector of all the components in the graph -- it is closed not an open
   // variant
@@ -1305,6 +1403,10 @@ private:
   std::vector<std::vector<size_t>> redges; // reverse edges
   // The visited node vector
   std::vector<bool> visited;
+  // The booleans to state if simplification and causality analysis is
+  // done.
+  bool isSimplified = false;
+  bool isCausalityAssigned = false;
 };
 
 static std::ostream &operator<<(std::ostream &os, BondGraph &g) {

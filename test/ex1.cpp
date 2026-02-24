@@ -13,7 +13,7 @@ int main() {
 
 
   // // Add the components to the BondGraph
-  BondGraph bg;
+  BondGraph bg("ex1");
   bg.addComponent(&c);
   bg.addComponent(&se);
   bg.addComponent(&r);

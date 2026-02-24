@@ -100,7 +100,7 @@ int main() {
   Component<ComponentType::L> l3{"l3"};
 
   // Now add these to the bondgraph
-  BondGraph bg;
+  BondGraph bg("hoistingDevice");
   bg.addComponent(&se);
   bg.addComponent(&u0);
   bg.addComponent(&j1);

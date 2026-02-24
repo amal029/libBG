@@ -63,7 +63,7 @@ int main(void) {
   Component<ComponentType::SF> ref{"w"};
   Component<ComponentType::O> y{"y"};
 
-  BondGraph bg;
+  BondGraph bg("Pcontrol");
   bg.addComponent(&i);   // inductor
   bg.addComponent(&vel); // velocity
   bg.addComponent(&j0);  // output connection

@@ -61,7 +61,7 @@ int main() {
   Component<ComponentType::L> l{"l"};    // inductor
   Component<ComponentType::J1> j1{"j1"}; // 1 Junction (in series)
   Component<ComponentType::J0> j0{"j0"}; // 0 Junction (in parallel)
-  BondGraph bg;
+  BondGraph bg("RLClowpass");
   bg.addComponent(&se);
   bg.addComponent(&r);
   bg.addComponent(&c);
@@ -101,5 +101,13 @@ int main() {
 
   // Integrate using euler solver
   integrate(s);
+  // Now generate the modellica code
+  component_map_t<double> constsM;
+  constsM[&se] = 24;
+  constsM[&c] = 1e-3;
+  constsM[&l] = 1;
+  constsM[&r] = 100;
+
+  bg.generateModellica(ast, std::move(constsM));
   return 0;
 }

@@ -9,10 +9,12 @@
 #include <cstring>
 #include <format>
 #include <iostream>
+#include <optional>
 #include <ostream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -45,6 +47,11 @@ enum class Causality : int { Flow = 0, Effort, ACausal };
 
 // The type of port, IN or OUT
 enum class PortType : std::uint8_t { IN = 0, OUT };
+
+struct IO {
+  std::string_view output;
+  std::string_view input;
+};
 
 // The port structure of the component
 struct Port {
@@ -95,7 +102,7 @@ private:
 };
 
 // The common Component class
-template <ComponentType T, Modulated m = Modulated::F> struct Component {
+template <ComponentType T, Modulated M = Modulated::F> struct Component {
   constexpr Component() {} // This is for Bond Graph insertion
   constexpr Component(const char *n) : name(n), ID(Util::getID()), myT(T) {
     value = (name + std::string("_") + std::to_string(ID));
@@ -111,6 +118,22 @@ template <ComponentType T, Modulated m = Modulated::F> struct Component {
   constexpr size_t getID() const { return ID; }
   constexpr ComponentType getType() const { return myT; }
   constexpr Modulated getModulated() const { return modulatedT; }
+  constexpr void getModulated(std::vector<IO> &toret) const {
+    if (modulate_signal.has_value()) {
+      IO in{modulate_signal.value(), getValue()};
+      toret.emplace_back(std::move(in));
+    }
+  }
+  constexpr void getIO(std::vector<IO> &toret) const {
+    if (effort_signal.has_value()) {
+      IO in{effort_signal.value(), getEffort()};
+      toret.emplace_back(std::move(in));
+    } else if (flow_signal.has_value()) {
+      IO in{flow_signal.value(), getFlow()};
+      toret.emplace_back(std::move(in));
+    }
+  }
+
   constexpr size_t portSize() const { return ports.size(); }
   constexpr std::vector<Port>::iterator portBegin() { return ports.begin(); }
   constexpr std::vector<Port>::iterator portEnd() { return ports.end(); }
@@ -330,17 +353,13 @@ template <ComponentType T, Modulated m = Modulated::F> struct Component {
   constexpr const std::string &getInternalName() const { return internal; }
   constexpr std::string &getInternalName() { return internal; }
 
-  // Getting the equation for the output component
+  // This will be used for getting the expression for the input and
+  // output signals.
   [[nodiscard]]
-  constexpr const expression_t &getOutput(expressionAst &ast) const {
-    static_assert(T == ComponentType::O,
-                  "Can get output only from an output component");
-    if constexpr (T == ComponentType::O) {
-      std::vector<Port *> pp = getPortWithType(PortType::IN);
-      std::string_view ss = pp[0]->getOutCausalName();
-      std::vector<size_t> eqs = ast.getEQ();
-      return pr_getStateEq(ast, ss, eqs);
-    }
+  constexpr const expression_t &getSymbolExpression(expressionAst &ast,
+                                                    std::string_view ss) const {
+    std::vector<size_t> eqs = ast.getEQ();
+    return pr_getStateEq(ast, ss, eqs);
   }
 
   // Get the state equation for the given component
@@ -373,9 +392,26 @@ template <ComponentType T, Modulated m = Modulated::F> struct Component {
     }
   }
 
+  void signal2ModulatedComponent(std::string &&s) {
+    static_assert(M == Modulated::T,
+                  "Signals can only influence modulated components");
+    modulate_signal = std::move(s);
+  }
+  void component2Signal(std::string &&s, Causality c) {
+    static_assert((T != ComponentType::J0 && T != ComponentType::J1 &&
+                   T != ComponentType::GY && T != ComponentType::TF),
+                  "Cannot convert non terminal components to signals");
+    if (c == Causality::Effort) {
+      effort_signal = std::move(s);
+    } else if (c == Causality::Flow) {
+      flow_signal = std::move(s);
+    }
+  }
+
 private:
+  [[nodiscard]]
   constexpr std::string_view getEffortFlow(Causality c) const {
-    Port *p = getPort(0);
+    const Port *p = getPort(0);
     if (p->getOutCausality() == Causality::ACausal) {
       throw std::runtime_error(
           std::format("Causality not assigned for component {}", getID()));
@@ -409,23 +445,42 @@ private:
   std::vector<Port> ports; // The number of ports of this component
   // The symbolic value of this component
   std::string value;
+  std::optional<std::string> modulate_signal;
+  std::optional<std::string> effort_signal;
+  std::optional<std::string> flow_signal;
   const char *name;     // The user name of the component
   std::string internal; // For C and L type components
   size_t ID;            // The unique ID generated internally for each component
   ComponentType myT;
-  Modulated modulatedT = m;
+  Modulated modulatedT = M;
   bool deleted = false; // Has this been deleted from the graph
                         // during simplification.
 };
 
 // This is the variant with all the different components
 using componentVariant =
-    std::variant<Component<ComponentType::C> *, Component<ComponentType::L> *,
-                 Component<ComponentType::J0> *, Component<ComponentType::J1> *,
-                 Component<ComponentType::R> *, Component<ComponentType::SE> *,
-                 Component<ComponentType::SF> *, Component<ComponentType::GY> *,
-                 Component<ComponentType::TF> *, Component<ComponentType::I> *,
-                 Component<ComponentType::O> *>;
+    std::variant<Component<ComponentType::C, Modulated::T> *,
+                 Component<ComponentType::C, Modulated::F> *,
+                 Component<ComponentType::L, Modulated::T> *,
+                 Component<ComponentType::L, Modulated::F> *,
+                 Component<ComponentType::J0, Modulated::F> *,
+                 Component<ComponentType::J0, Modulated::T> *,
+                 Component<ComponentType::J1, Modulated::T> *,
+                 Component<ComponentType::J1, Modulated::F> *,
+                 Component<ComponentType::R, Modulated::T> *,
+                 Component<ComponentType::R, Modulated::F> *,
+                 Component<ComponentType::SE, Modulated::T> *,
+                 Component<ComponentType::SE, Modulated::F> *,
+                 Component<ComponentType::SF, Modulated::T> *,
+                 Component<ComponentType::SF, Modulated::F> *,
+                 Component<ComponentType::GY, Modulated::T> *,
+                 Component<ComponentType::GY, Modulated::F> *,
+                 Component<ComponentType::TF, Modulated::T> *,
+                 Component<ComponentType::TF, Modulated::F> *,
+                 Component<ComponentType::I, Modulated::T> *,
+                 Component<ComponentType::I, Modulated::F> *,
+                 Component<ComponentType::O, Modulated::T> *,
+                 Component<ComponentType::O, Modulated::F> *>;
 
 // The hash required to make a map of Component pointers
 struct ComponentHash {
@@ -446,6 +501,9 @@ struct ComponentEqual {
 // This is the variant with all the different components
 using storageVariant =
     std::variant<Component<ComponentType::C> *, Component<ComponentType::L> *>;
+
+using IOVariant =
+    std::variant<Component<ComponentType::O> *, Component<ComponentType::I> *>;
 
 // The hash required to make a map of Component pointers
 struct StorageHash {
@@ -536,8 +594,8 @@ static std::ostream &operator<<(std::ostream &os, const Port &p) {
 }
 
 // Operators for printing things
-template <ComponentType T>
-static std::ostream &operator<<(std::ostream &os, const Component<T> &c) {
+template <ComponentType T, Modulated M>
+static std::ostream &operator<<(std::ostream &os, const Component<T, M> &c) {
   if (c.getDeleted())
     throw DeletedException(
         std::format("Accessed a deleted node {}!", c.getID()));
