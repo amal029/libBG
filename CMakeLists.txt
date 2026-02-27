@@ -67,10 +67,17 @@ add_executable(hoistingDevice ../test/hoistingDevice.cpp ${THIRD_PARTY_SRCS})
 
 # The include directory
 target_include_directories(hoistingDevice PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
-
 target_compile_options(hoistingDevice PRIVATE ${CXX_FLAGS})
-# target_link_directories(hoistingDevice PRIVATE ${GINAC_LIBRARY_DIRS})
-# target_link_libraries(hoistingDevice PRIVATE ${GINAC_LIBRARIES})
+
+#--------------------------Test 3--------------------------------------
+# The second test
+# Add executable target with source files listed in SOURCE_FILES variable
+add_executable(hoistingDevicediff ../test/hoistingDevdiff.cpp ${THIRD_PARTY_SRCS})
+
+# The include directory
+target_include_directories(hoistingDevicediff PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
+target_compile_options(hoistingDevicediff PRIVATE ${CXX_FLAGS})
+
 
 #----------------------- Example 1---------------------
 # Add executable target with source files listed in SOURCE_FILES variable

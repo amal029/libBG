@@ -2,6 +2,7 @@
 
 #include "exception.hpp"
 #include "util.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -34,6 +35,10 @@ using expression_t = std::variant<Symbol, Number, Expression<EOP::ADD>,
 static void print_expression_t(std::ostream &os, const expression_t &in,
                                const expressionAst &ast);
 
+static void print_modellica_t(std::string &output, const expression_t &in,
+                              const std::vector<std::string_view> &derivs,
+                              const expressionAst &ast);
+
 struct Number {
   constexpr explicit Number(double n) : num(n) {}
   Number(const Number &) = delete;
@@ -52,8 +57,10 @@ struct Number {
   bool hasDeriv(const expressionAst &) const { return false; }
   T getT() const { return t; }
   double getNum() const { return num; }
-  void print_expr(std::ostream &os, const expressionAst &) const {
-    os << num;
+  void print_expr(std::ostream &os, const expressionAst &) const { os << num; }
+  void print_modellica(std::string &output, const expressionAst &,
+                       const std::vector<std::string_view> &) const {
+    output += "(" + std::to_string(num) + ")";
   }
 
 private:
@@ -89,6 +96,16 @@ struct Symbol {
   void print_expr(std::ostream &os, const expressionAst &) const {
     os << name;
     // os << name.substr(0, name.find('_'));
+  }
+  void print_modellica(std::string &output, const expressionAst &,
+                       const std::vector<std::string_view> &derivs) const {
+    auto res = std::find(derivs.begin(), derivs.end(), name);
+    // This allocates!
+    if (res != derivs.end()) {
+      output += "(der(" + (std::string)name.substr(1) + "))";
+    } else {
+      output += "(" + (std::string)name + ")";
+    }
   }
 
 private:
@@ -219,6 +236,29 @@ template <EOP op> struct Expression {
   size_t getRight() const { return right; }
   void setRight(size_t vv) { right = vv; }
   T getT() const { return t; }
+  void print_modellica(std::string &output, const expressionAst &ast,
+                       const std::vector<std::string_view> &derivs) const {
+    if constexpr (op == EOP::ADD || op == EOP::MUL || op == EOP::DIV ||
+                  op == EOP::SUB)
+      output += "(";
+    print_modellica_t(output, ast[getLeft()], ast, derivs);
+    if constexpr (op == EOP::ADD) {
+      output += " + ";
+    } else if constexpr (op == EOP::MUL) {
+      output += " * ";
+    } else if constexpr (op == EOP::DIV) {
+      output += " / ";
+    } else if constexpr (op == EOP::EQ) {
+      output += " = ";
+    } else if constexpr (op == EOP::SUB) {
+      output += " - ";
+    }
+    // print_expression_t(os, ast[getRight()], ast);
+    print_modellica_t(output, ast[getRight()], ast, derivs);
+    if constexpr (op == EOP::ADD || op == EOP::MUL || op == EOP::DIV ||
+                  op == EOP::SUB)
+      output += ")";
+  }
   void print_expr(std::ostream &os, const expressionAst &ast) const {
     if constexpr (op != EOP::EQ)
       os << "(";
@@ -262,6 +302,55 @@ struct expressionAst {
   [[nodiscard]]
   size_t size() const {
     return arena.size();
+  }
+
+  // This will be used for getting the expression for the input and
+  // output signals.
+  [[nodiscard]]
+  static constexpr const expression_t &
+  getSymbolExpression(expressionAst &ast, std::string_view ss) {
+    std::cout << ss << "\n";
+    std::vector<size_t> eqs = ast.getEQ();
+    try {
+      return pr_getStateEq(ast, ss, eqs);
+    } catch (NotFound e) {
+      size_t i = 0;
+      // Then just get the expression that is the symbol itself.
+      for (; i < ast.size(); ++i) {
+        const Symbol *x = std::get_if<Symbol>(&ast[i]);
+        if (x != nullptr && x->getName() == ss) {
+          break;
+        }
+      }
+      if (i < ast.size()) {
+        throw IsSymbol("Is a Symbol");
+      } else {
+        throw NotFound(
+            std::format("Cannot find an expression in ast named: {}", ss));
+      }
+    }
+  }
+
+  static constexpr const expression_t &pr_getStateEq(expressionAst &ast,
+                                                     std::string_view ss,
+                                                     std::vector<size_t> &eqs) {
+    size_t toget = 0;
+    // Take the derivative (symbol) of the output
+    for (size_t x : eqs) {
+      const Expression<EOP::EQ> *y = std::get_if<Expression<EOP::EQ>>(&ast[x]);
+      assert(y != nullptr);
+      const Symbol *sn = std::get_if<Symbol>(&ast[y->getLeft()]);
+      if (sn->getName() == ss) {
+        toget = x;
+        break;
+      }
+    }
+    if (toget != 0) {
+      ast.simplify(toget, eqs);
+      return ast[toget];
+    } else {
+      throw NotFound("Did not find the variables for storage/output element");
+    }
   }
 
   expressionAst(const expressionAst &) = delete;
@@ -357,6 +446,14 @@ private:
 static void print_expression_t(std::ostream &os, const expression_t &in,
                                const expressionAst &ast) {
   std::visit([&os, &ast](const auto &x) { x.print_expr(os, ast); }, in);
+}
+
+static void print_modellica_t(std::string &output, const expression_t &in,
+                              const expressionAst &ast,
+                              const std::vector<std::string_view> derivs) {
+  std::visit([&output, &ast, &derivs](
+                 const auto &x) { x.print_modellica(output, ast, derivs); },
+             in);
 }
 
 template <typename T>

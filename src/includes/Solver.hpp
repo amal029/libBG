@@ -11,10 +11,6 @@ template <typename V = double>
 using component_map_t =
     std::unordered_map<componentVariant, V, ComponentHash, ComponentEqual>;
 
-template <typename V = double>
-using storage_map_t =
-    std::unordered_map<storageVariant, V, StorageHash, StorageEqual>;
-
 template <NumericType T = double> struct Solver {
   explicit Solver(expressionAst &ast, component_map_t<T> &&consts,
                   const std::vector<storageVariant> &comps)

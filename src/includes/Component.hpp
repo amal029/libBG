@@ -14,7 +14,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -49,8 +48,10 @@ enum class Causality : int { Flow = 0, Effort, ACausal };
 enum class PortType : std::uint8_t { IN = 0, OUT };
 
 struct IO {
-  std::string_view output;
-  std::string_view input;
+  const std::string &output;
+  const std::string_view input;
+  const ComponentType t;
+  const Causality c;
 };
 
 // The port structure of the component
@@ -120,16 +121,16 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
   constexpr Modulated getModulated() const { return modulatedT; }
   constexpr void getModulated(std::vector<IO> &toret) const {
     if (modulate_signal.has_value()) {
-      IO in{modulate_signal.value(), getValue()};
+      IO in{modulate_signal.value(), getValue(), T, Causality::ACausal};
       toret.emplace_back(std::move(in));
     }
   }
   constexpr void getIO(std::vector<IO> &toret) const {
     if (effort_signal.has_value()) {
-      IO in{effort_signal.value(), getEffort()};
+      IO in{effort_signal.value(), getEffort(), T, Causality::Effort};
       toret.emplace_back(std::move(in));
     } else if (flow_signal.has_value()) {
-      IO in{flow_signal.value(), getFlow()};
+      IO in{flow_signal.value(), getFlow(), T, Causality::Flow};
       toret.emplace_back(std::move(in));
     }
   }
@@ -353,15 +354,6 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
   constexpr const std::string &getInternalName() const { return internal; }
   constexpr std::string &getInternalName() { return internal; }
 
-  // This will be used for getting the expression for the input and
-  // output signals.
-  [[nodiscard]]
-  constexpr const expression_t &getSymbolExpression(expressionAst &ast,
-                                                    std::string_view ss) const {
-    std::vector<size_t> eqs = ast.getEQ();
-    return pr_getStateEq(ast, ss, eqs);
-  }
-
   // Get the state equation for the given component
   [[nodiscard]]
   constexpr const expression_t &getStateEq(expressionAst &ast) const {
@@ -373,10 +365,10 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
       if (p->getOutCausality() == Causality::Flow) {
         // std::string ss = "d" + std::string(p->getOutCausalName());
         const std::string &ss = getInternalName();
-        return pr_getStateEq(ast, ss, eqs);
+        return expressionAst::pr_getStateEq(ast, ss, eqs);
       } else {
         std::string_view ss = p->getInCausalName();
-        return pr_getStateEq(ast, ss, eqs);
+        return expressionAst::pr_getStateEq(ast, ss, eqs);
       }
     } else if constexpr (T == ComponentType::C) {
       const Port *p = getPort(0);
@@ -384,10 +376,10 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
       if (p->getOutCausality() == Causality::Effort) {
         // std::string ss = "d" + std::string(p->getOutCausalName());
         const std::string &ss = getInternalName();
-        return pr_getStateEq(ast, ss, eqs);
+        return expressionAst::pr_getStateEq(ast, ss, eqs);
       } else {
         std::string_view ss = p->getInCausalName();
-        return pr_getStateEq(ast, ss, eqs);
+        return expressionAst::pr_getStateEq(ast, ss, eqs);
       }
     }
   }
@@ -419,27 +411,6 @@ private:
       return p->getOutCausalName();
     } else
       return p->getInCausalName();
-  }
-  constexpr const expression_t &pr_getStateEq(expressionAst &ast,
-                                              std::string_view ss,
-                                              std::vector<size_t> &eqs) const {
-    size_t toget = 0;
-    // Take the derivative (symbol) of the output
-    for (size_t x : eqs) {
-      const Expression<EOP::EQ> *y = std::get_if<Expression<EOP::EQ>>(&ast[x]);
-      assert(y != nullptr);
-      const Symbol *sn = std::get_if<Symbol>(&ast[y->getLeft()]);
-      if (sn->getName() == ss) {
-        toget = x;
-        break;
-      }
-    }
-    if (toget != 0) {
-      ast.simplify(toget, eqs);
-      return ast[toget];
-    } else {
-      throw NotFound("Did not find the variables for storage/output element");
-    }
   }
 
   std::vector<Port> ports; // The number of ports of this component
@@ -520,6 +491,10 @@ struct StorageEqual {
     return lname == rname;
   }
 };
+
+template <typename V = double>
+using storage_map_t =
+    std::unordered_map<storageVariant, V, StorageHash, StorageEqual>;
 
 // Printing the enum
 static std::ostream &operator<<(std::ostream &os, const ComponentType &c) {

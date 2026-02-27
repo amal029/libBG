@@ -2,75 +2,17 @@
 #include "Component.hpp"
 #include "Solver.hpp"
 #include "expression.hpp"
-#include "rkf45.hpp"
 #include <cfloat>
-#include <cmath>
 #include <cstddef>
 #include <cstring>
-#include <fstream>
 #include <iostream>
-#include <span>
 #include <unordered_map>
-#include <vector>
 
 void print_state_eqns(const expression_t &res, const char *name,
                       expressionAst &ast) {
   std::cout << std::format("State eq {}: ", name);
   print_expression_t(std::cout, res, ast);
   std::cout << "\n";
-}
-
-// Use global variables for making things more efficient.
-Solver<double> *gs = nullptr;
-std::vector<double> xv;
-
-// We need this function signature, because the library demands it.
-void toIntegrate(double t, double x[], double dxdt[]) {
-
-  std::span<double> ptr(dxdt, gs->getComponentSize());
-  gs->dxdt(xv, ptr); // getting the derivative
-}
-
-// Integrator for the system
-void integrate(Solver<double> &s) {
-  gs = &s; // Set the global Solver
-  int neqn = s.getComponentSize();
-  // Reserve enough space in input
-  xv.reserve(neqn);
-
-  // This is heap allocated to avoid VLA
-  double *YP = new double[neqn];
-  double t = 0; // The current value of time.
-  double tout = 50;
-  double abserr = sqrt(DBL_EPSILON);
-  double relerr = sqrt(DBL_EPSILON);
-  int FLAG = -1;
-
-  // Initial values
-  xv.push_back(0);
-  xv.push_back(1);
-  xv.push_back(2);
-  xv.push_back(10);
-
-  // Write the result to a file
-  std::ofstream file("/tmp/test2.csv");
-  assert(file.is_open());
-  // First write the very first line
-  // The header
-  file << "Time(sec), L1, L2, C, L3" << "\n";
-  file << t << "," << xv[0] << "," << xv[1] << "," << xv[2] << "," << xv[3]
-       << "\n";
-  // Call the integrator -- one step mode
-  while (FLAG != 2) {
-    FLAG = r8_rkf45(toIntegrate, neqn, xv.data(), YP, &t, tout, &relerr, abserr,
-                    -1);
-    file << t << ", " << xv[0] << "," << xv[1] << "," << xv[2] << "," << xv[3]
-         << "\n";
-  }
-
-  file.close();
-
-  delete[] YP;
 }
 
 int main() {
@@ -91,16 +33,12 @@ int main() {
   Component<ComponentType::R> r2{"r2"};
   Component<ComponentType::TF> tf{"tf"};
 
-  // This is the capacitance junction
-  Component<ComponentType::J0> v2{"v2"};
-  Component<ComponentType::C> c{"c"};
-
   Component<ComponentType::J1> v1{"v1"};
   Component<ComponentType::SE> se2{"se2"};
   Component<ComponentType::L> l3{"l3"};
 
   // Now add these to the bondgraph
-  BondGraph bg("hoistingDevice");
+  BondGraph bg("hoistingDevicediff");
   bg.addComponent(&se);
   bg.addComponent(&u0);
   bg.addComponent(&j1);
@@ -116,9 +54,6 @@ int main() {
   bg.addComponent(&l2);
   bg.addComponent(&r2);
   bg.addComponent(&tf);
-  // Add the extra components
-  bg.addComponent(&v2);
-  bg.addComponent(&c);
 
   bg.addComponent(&v1);
   bg.addComponent(&se2);
@@ -140,9 +75,7 @@ int main() {
   bg.connect(o, r2);
   bg.connect(o, tf);
 
-  bg.connect(tf, v2);
-  bg.connect(v2, c);
-  bg.connect(v2, v1);
+  bg.connect(tf, v1);
   bg.connect(se2, v1);
   bg.connect(v1, l3);
 
@@ -156,37 +89,12 @@ int main() {
   expressionAst ast = bg.generateStateSpace();
   const expression_t &res = l1.getStateEq(ast);
   const expression_t &res2 = l2.getStateEq(ast);
-  const expression_t &resc = c.getStateEq(ast);
   const expression_t &res3 = l3.getStateEq(ast);
 
   print_state_eqns(res, "l1", ast);
   print_state_eqns(res2, "l2", ast);
-  print_state_eqns(resc, "C", ast);
   print_state_eqns(res3, "l3", ast);
 
-  // Get the slope of a given state equation
-  // Make the consts first
-  component_map_t<double> consts;
-  consts[&se] = 1.0;
-  consts[&r] = 1;
-  consts[&l1] = 2;
-  consts[&gy] = 2;
-  consts[&l2] = 2;
-  consts[&r2] = 1;
-  consts[&tf] = -2;
-  consts[&c] = 2;
-  consts[&se2] = -2;
-  consts[&l3] = 2;
-  std::vector<storageVariant> storageComponents{&l1, &l2, &c, &l3};
-  Solver<double> s{ast, std::move(consts), storageComponents};
-  // Print the things again
-  print_state_eqns(res, "l1", ast);
-  print_state_eqns(res2, "l2", ast);
-  print_state_eqns(resc, "C", ast);
-  print_state_eqns(res3, "l3", ast);
-
-  // Integrate using RK45 solver
-  integrate(s);
   // Generate modellica code
   component_map_t<double> constsm;
   constsm[&se] = 1.0;
@@ -196,11 +104,16 @@ int main() {
   constsm[&l2] = 2;
   constsm[&r2] = 1;
   constsm[&tf] = -2;
-  constsm[&c] = 2;
   constsm[&se2] = -2;
   constsm[&l3] = 2;
+
+  // Set some outputs for plotting?
+  l1.component2Signal("l1", Causality::Flow);
+  l2.component2Signal("l2", Causality::Flow);
+  l3.component2Signal("l3", Causality::Flow);
+  
   // The initial values for this system
-  storage_map_t<double> initialValues{{&l1, 0}, {&l2, 1}, {&c, 1}, {&l3, 10}};
-  bg.generateModellica(ast, std::move(constsm), std::move(initialValues));
+  // storage_map_t<double> initialValues{{&l1, 0}, {&l2, 1}, {&l3, 10}};
+  bg.generateModellica(ast, std::move(constsm));
   return 0;
 }

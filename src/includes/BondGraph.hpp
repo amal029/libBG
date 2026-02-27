@@ -3,11 +3,14 @@
 #include "Component.hpp"
 #include "exception.hpp"
 #include "expression.hpp"
+#include "util.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <numeric>
 #include <ostream>
@@ -146,7 +149,7 @@ struct BondGraph {
     // inputs and outputs.
     if (sources.empty()) {
       throw NotFound(
-          "Not source in the Bond Graph to perform causality analysis\n");
+          "No source in the Bond Graph to perform causality analysis\n");
     }
     // There can be only a single output for a given source
     for (const auto &s : sources) {
@@ -173,10 +176,9 @@ struct BondGraph {
       junctionPropagate(edges[s][0]);
     }
 
-    // XXX: Here we should also assign causality using the input and
-    // outputs. Inputs and outputs that are not connected to anything,
-    // i.e., only those that have a single output and input port,
-    // respectively.
+    // XXX: Here we also assign causality using the input and outputs.
+    // Inputs and outputs that are not connected to anything, i.e., only
+    // those that have a single output and input port, respectively.
     std::vector<size_t> os;
     std::vector<size_t> is;
     getIOs(os, is);
@@ -252,7 +254,7 @@ struct BondGraph {
     // inputs and outputs.
     if (sources.empty()) {
       throw NotFound(
-          "Not source in the Bond Graph to perform causality analysis\n");
+          "No source in the Bond Graph to perform causality analysis\n");
     }
     // There can be only a single output for a given source
     auto visitor = [&](const auto &x) { checkCausality(*x); };
@@ -288,7 +290,8 @@ struct BondGraph {
       std::unordered_map<componentVariant, V, ComponentHash, ComponentEqual>;
 
   // This generates the Modellica block/model
-  void generateModellica(expressionAst &ast, component_map_t<double> &&consts) {
+  void generateModellica(expressionAst &ast, component_map_t<double> &&consts,
+                         storage_map_t<double> &&initialValues = {}) {
     // Get all the storage elements in the graph
     std::vector<storageVariant> storageElements;
     for (size_t i = 0; i < components.size(); ++i) {
@@ -304,18 +307,23 @@ struct BondGraph {
       }
     }
     replaceConsts(ast, std::move(consts), storageElements);
-    // DEBUG: print the outputs for state equations for a given example
+    // Declare the storage element variables (these will be internal)
+    std::vector<std::string_view> storageNames =
+        getStorageNames(storageElements); // these are with the "d" part.
+
+    // This is the final output
+    std::string ders;
+    ders.reserve(100); // we are reserving a huge amount here
+    // Get the differential equations in output string for every storage
+    // element?
     for (const storageVariant &x : storageElements) {
       std::visit(
           [&](const auto &y) {
-            print_expression_t(std::cout, y->getStateEq(ast), ast);
-            std::cout << "\n";
+            print_modellica_t(ders, y->getStateEq(ast), ast, storageNames);
+            ders += ";\n";
           },
           x);
     }
-    // Declare the storage element variables (these will be internal)
-    std::vector<std::string_view> storageNames =
-        getStorageNames(storageElements);
     // Get all the names of the outputs and inputs that we have
     std::vector<IO> moduldatedInputs;
     std::vector<IO> signalOutputs;
@@ -325,9 +333,84 @@ struct BondGraph {
       std::visit([&](const auto &x) { x->getIO(signalOutputs); },
                  components[i]);
     }
-    // If the modulated and signalOutputs are empty then just make a
-    // model. Else make a block. I think the ast expression should have
-    // a deriv type explicitly instead of using "d" at the start.
+    std::string IOStrings;
+    // Now make the input and outputs
+    for (const IO &x : moduldatedInputs) { // -- modulated values
+      // comes from outside
+      IOStrings += "input Real " + (std::string)x.output + ";\n";
+      // The inside real value
+      IOStrings += "Real " + (std::string)x.input + ";\n";
+    }
+    for (const IO &x : signalOutputs) { // -- the actual I/O requested by user
+      IOStrings += "output Real " + (std::string)x.output + ";\n";
+      if (x.t == ComponentType::R ||
+          (x.t == ComponentType::L && x.c == Causality::Effort) ||
+          (x.t == ComponentType::C && x.c == Causality::Flow)) {
+        IOStrings += "Real " + (std::string)x.input + ";\n";
+      }
+    }
+    // These will go inside the equations
+    std::string outputInputStrings;
+    // Equalise the outputs to inputs here
+    for (const IO &x : moduldatedInputs) {
+      outputInputStrings += (std::string)x.input = (std::string)x.output;
+      outputInputStrings += ";\n";
+    }
+    for (const IO &x : signalOutputs) {
+      outputInputStrings += x.output + " = " + (std::string)x.input;
+      outputInputStrings += ";\n";
+    }
+    // Now make the output that has been asked for
+    // These will also go inside the equations
+    std::string outputStrings;
+    outputStrings.reserve(100);
+    for (const IO &x : signalOutputs) {
+      if (x.t == ComponentType::R ||
+          (x.t == ComponentType::L && x.c == Causality::Effort) ||
+          (x.t == ComponentType::C && x.c == Causality::Flow)) {
+        try {
+          const expression_t &y =
+              expressionAst::getSymbolExpression(ast, x.input);
+          print_modellica_t(outputStrings, y, ast, storageNames);
+          outputStrings += ";\n";
+        } catch (IsSymbol) {
+          // Do nothing then
+        }
+      }
+    }
+    // Now print the equations
+    std::string equations = "equation\n";
+    equations += ders;
+    equations += outputInputStrings;
+    equations += outputStrings;
+    // Now make the block
+    std::string block = "block " + name + "\n";
+    block += IOStrings + "\n";
+    // Declare the storagenames here -- this can be made better
+    consts_t<double> initValues;
+    for (const auto &[k, v] : initialValues) {
+      std::visit(
+          [&](const auto &z) -> void { initValues[z->getInternalName()] = v; },
+          k);
+    }
+    for (const std::string_view x : storageNames) {
+      // If the initial value is provided then make it fixed
+      if (!initValues.contains(x)) {
+        block += "Real " + (std::string)(x.substr(1)) + ";\n";
+      } else {
+        block += std::format("Real {}(start={}, fixed=true);\n",
+                             (std::string)(x.substr(1)), initValues[x]);
+      }
+    }
+    block += equations;
+    block += "end " + name + ";";
+    // std::cout << block;
+    // Write to the output file
+    std::ofstream outFile("/tmp/" + name + ".mo");
+    if (outFile.is_open()) {
+      outFile << block;
+      outFile.close();
+    }
   }
 
 private:
@@ -335,11 +418,14 @@ private:
   std::vector<std::string_view>
   getStorageNames(std::vector<storageVariant> &storageElements) {
     std::vector<std::string_view> toret;
-    toret.reserve(storageElements.size());
+    toret.resize(storageElements.size());
+    size_t counter = 0;
     for (storageVariant &x : storageElements) {
-      const std::string &y =
-          std::visit([](const auto &x) { return x->getInternalName(); }, x);
-      toret.emplace_back(y.substr(1));
+      std::visit(
+          [&](const auto &x) -> void {
+            toret[counter++] = x->getInternalName();
+          },
+          x);
     }
     return toret;
   }
@@ -474,8 +560,8 @@ private:
       internal = "d" + std::string(inport->getInCausalName());
       size_t in_index = space.append(Symbol{internal});
       // Differential causality
-      size_t div_index = space.append(Expression<EOP::DIV>(in_index, 1));
-      size_t rr = space.append(Expression<EOP::MUL>{div_index, value_index});
+      // size_t div_index = space.append(Expression<EOP::DIV>(in_index, 1));
+      size_t rr = space.append(Expression<EOP::MUL>{in_index, value_index});
       size_t _ = space.append(Expression<EOP::EQ>{out_index, rr});
       return _;
     }
