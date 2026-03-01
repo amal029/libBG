@@ -191,7 +191,7 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
     } else if constexpr (T == ComponentType::O) {
       if (portSize() != 1) {
         throw std::runtime_error(std::format(
-            "Cannot get effort of connected  component {}", getID()));
+            "Cannot get effort of connected component {}", getID()));
       } else {
         return getEffortFlow(Causality::Effort);
       }

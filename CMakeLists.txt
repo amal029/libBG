@@ -25,7 +25,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(INCLUDES src/includes ${THIRD_PARTY_DIR})
 
 # The compiler options
-set (CXX_FLAGS -O3 -Wall -Werror -Wpedantic -Wextra -Wno-unused-parameter -Wno-unused-function)
+set (CXX_FLAGS -O3  -Wall -Werror -Wpedantic -Wextra -Wno-unused-parameter -Wno-unused-function)
 
 # Add ex1.cpp file of the project root directory as a source file
 # set(SOURCE_FILES ../test/test1.cpp)
@@ -77,6 +77,16 @@ add_executable(hoistingDevicediff ../test/hoistingDevdiff.cpp ${THIRD_PARTY_SRCS
 # The include directory
 target_include_directories(hoistingDevicediff PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
 target_compile_options(hoistingDevicediff PRIVATE ${CXX_FLAGS})
+
+#--------------------------Test 3--------------------------------------
+# The second test
+# Add executable target with source files listed in SOURCE_FILES variable
+add_executable(battery ../test/battery.cpp ${THIRD_PARTY_SRCS})
+
+# The include directory
+target_include_directories(battery PRIVATE ${INCLUDES} ${THIRD_PARTY_DIR})
+target_compile_options(battery PRIVATE ${CXX_FLAGS})
+
 
 
 #----------------------- Example 1---------------------

@@ -74,7 +74,7 @@ int main(void) {
   Component<ComponentType::R> ogain{"ogain"};
   Component<ComponentType::J0> obs{"obs"};
 
-  BondGraph bg("Compensator");
+  BondGraph bg("Compensator", false);
   bg.addComponent(&i);   // inductor
   bg.addComponent(&vel); // velocity
   bg.addComponent(&j0);  // output connection

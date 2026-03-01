@@ -20,7 +20,7 @@
 
 struct BondGraph {
   // Public methods
-  BondGraph(std::string &&name) : name(name) {}
+  BondGraph(std::string &&name, bool Jpref = true) : name(name), Jpref(Jpref) {}
   BondGraph(const BondGraph &) = delete;
   BondGraph(BondGraph &&) = default;
   BondGraph &operator=(const BondGraph &) = delete;
@@ -28,7 +28,8 @@ struct BondGraph {
   ~BondGraph() {}
 
   // Adding components to the graph
-  template <ComponentType T> void addComponent(Component<T> *x) {
+  template <ComponentType T, Modulated M>
+  void addComponent(Component<T, M> *x) {
     // We need to push the pointer to the correct position according to
     // the ID of the component.
     size_t els = x->getID();
@@ -47,8 +48,8 @@ struct BondGraph {
   // Concept to constraint the type of connections
   // Adding the edge between the components (also add the port for these
   // components)
-  template <ComponentType X, ComponentType Y>
-  void connect(Component<X> &in, Component<Y> &out) {
+  template <ComponentType X, ComponentType Y, Modulated M1, Modulated M2>
+  void connect(Component<X, M1> &in, Component<Y, M2> &out) {
     static_assert(X == ComponentType::J0 || X == ComponentType::J1 ||
                       Y == ComponentType::J0 || Y == ComponentType::J1,
                   "Can only connect to a Junction");
@@ -76,15 +77,21 @@ struct BondGraph {
 
   // Get all the source IDs in the graph
   void getSources(std::vector<size_t> &sources) const {
-    using source_e = Component<ComponentType::SE> *;
-    using source_f = Component<ComponentType::SF> *;
+    using source_e_f = Component<ComponentType::SE, Modulated::F> *;
+    using source_e_t = Component<ComponentType::SE, Modulated::T> *;
+    using source_f_f = Component<ComponentType::SF, Modulated::F> *;
+    using source_f_t = Component<ComponentType::SF, Modulated::T> *;
 
     for (size_t i = 0; i < getNumComponents(); ++i) {
       auto &vv = getComponentAt(i);
-      if (std::holds_alternative<source_e>(vv)) {
-        sources.push_back(std::get<source_e>(vv)->getID());
-      } else if (std::holds_alternative<source_f>(vv)) {
-        sources.push_back(std::get<source_f>(vv)->getID());
+      if (std::holds_alternative<source_e_f>(vv)) {
+        sources.push_back(std::get<source_e_f>(vv)->getID());
+      } else if (std::holds_alternative<source_f_f>(vv)) {
+        sources.push_back(std::get<source_f_f>(vv)->getID());
+      } else if (std::holds_alternative<source_e_t>(vv)) {
+        sources.push_back(std::get<source_e_t>(vv)->getID());
+      } else if (std::holds_alternative<source_f_t>(vv)) {
+        sources.push_back(std::get<source_f_t>(vv)->getID());
       }
     }
   }
@@ -147,10 +154,10 @@ struct BondGraph {
 
     // XXX: This handles the case where there are no sources, but only
     // inputs and outputs.
-    if (sources.empty()) {
-      throw NotFound(
-          "No source in the Bond Graph to perform causality analysis\n");
-    }
+    // if (sources.empty()) {
+    //   throw NotFound(
+    //       "No source in the Bond Graph to perform causality analysis\n");
+    // }
     // There can be only a single output for a given source
     for (const auto &s : sources) {
       Causality in, out;
@@ -270,8 +277,44 @@ struct BondGraph {
     std::vector<size_t> sources;
     getSources(sources);
     auto visitor = [&](auto &x) { addToSpace(ast, *x); };
-    // This is by default pre-order traversal
+
+    std::vector<size_t> os;
+    std::vector<size_t> is;
+    getIOs(os, is);
+    for (size_t j : os) {
+      size_t inPorts = std::visit(
+          [&](const auto &x) {
+            return x->getPortWithType(PortType::IN).size();
+          },
+          getComponentAt(j));
+      size_t outPorts = std::visit(
+          [&](const auto &x) {
+            return x->getPortWithType(PortType::OUT).size();
+          },
+          getComponentAt(j));
+      // Only if the output has nothing going out
+      if (outPorts == 0 && inPorts == 1)
+        sources.emplace_back(redges[j][0]);
+    }
+
+    for (size_t j : is) {
+      size_t inPorts = std::visit(
+          [&](const auto &x) {
+            return x->getPortWithType(PortType::IN).size();
+          },
+          getComponentAt(j));
+      size_t outPorts = std::visit(
+          [&](const auto &x) {
+            return x->getPortWithType(PortType::OUT).size();
+          },
+          getComponentAt(j));
+      // Only if the input has nothing coming in
+      if (inPorts == 0 && outPorts == 1)
+        sources.emplace_back(edges[j][0]);
+    }
+    // Finally this is by default pre-order traversal
     dfs(sources, visitor);
+
     return ast;
   }
 
@@ -343,7 +386,8 @@ struct BondGraph {
     }
     for (const IO &x : signalOutputs) { // -- the actual I/O requested by user
       IOStrings += "output Real " + (std::string)x.output + ";\n";
-      if (x.t == ComponentType::R ||
+      if (x.t == ComponentType::R || x.t == ComponentType::I ||
+          x.t == ComponentType::O ||
           (x.t == ComponentType::L && x.c == Causality::Effort) ||
           (x.t == ComponentType::C && x.c == Causality::Flow)) {
         IOStrings += "Real " + (std::string)x.input + ";\n";
@@ -412,6 +456,9 @@ struct BondGraph {
       outFile.close();
     }
   }
+
+  const std::vector<std::vector<size_t>> &getRedges() const { return redges; }
+  const std::vector<std::vector<size_t>> &getEdges() const { return edges; }
 
 private:
   // Gets the name of the storage elements
@@ -790,7 +837,7 @@ private:
       out_index = space.append(Symbol{outport->getInCausalName()});
       _ = space.append(Expression<EOP::EQ>{in_index, out_index});
       OutputsEqualInputs(space, x);
-    } else {
+    } else if (x.portSize() > 2) {
       throw PortIndexOutofBounds(
           std::format("Output component {} has more than 2 ports", x.getID()));
     }
@@ -813,7 +860,7 @@ private:
       in_index = space.append(Symbol{inport->getOutCausalName()});
       out_index = space.append(Symbol{outport->getInCausalName()});
       _ = space.append(Expression<EOP::EQ>{in_index, out_index});
-    } else {
+    } else if (x.portSize() > 2) {
       throw PortIndexOutofBounds(
           std::format("Input {} has more than 2 ports!", x.getID()));
     }
@@ -1272,18 +1319,34 @@ private:
                                     assignedPorts, myType);
       assignedPorts.push_back(mytfports[i]);
     }
-    // Now we assign causality to rs.
-    for (size_t i = 0; i < rs.size(); ++i) {
-      componentAssignAndPropagateR(rs[i], rports[i], myRports[i], id,
-                                   assignedPorts, myType);
-      assignedPorts.push_back(myRports[i]);
-    }
 
-    // Now assign the junction ports
-    for (size_t i = 0; i < js.size(); ++i) {
-      componentAssignAndPropagateJ(js[i], jports[i], myjports[i], id,
-                                   assignedPorts, myType);
-      assignedPorts.push_back(myjports[i]);
+    if (Jpref) {
+      // Now assign the junction ports
+      for (size_t i = 0; i < js.size(); ++i) {
+        componentAssignAndPropagateJ(js[i], jports[i], myjports[i], id,
+                                     assignedPorts, myType);
+        assignedPorts.push_back(myjports[i]);
+      }
+
+      // Now we assign causality to rs.
+      for (size_t i = 0; i < rs.size(); ++i) {
+        componentAssignAndPropagateR(rs[i], rports[i], myRports[i], id,
+                                     assignedPorts, myType);
+        assignedPorts.push_back(myRports[i]);
+      }
+    } else {
+      // Now we assign causality to rs.
+      for (size_t i = 0; i < rs.size(); ++i) {
+        componentAssignAndPropagateR(rs[i], rports[i], myRports[i], id,
+                                     assignedPorts, myType);
+        assignedPorts.push_back(myRports[i]);
+      }
+      // Now assign the junction ports
+      for (size_t i = 0; i < js.size(); ++i) {
+        componentAssignAndPropagateJ(js[i], jports[i], myjports[i], id,
+                                     assignedPorts, myType);
+        assignedPorts.push_back(myjports[i]);
+      }
     }
 
     // Now we assign causality to inputs
@@ -1493,12 +1556,41 @@ private:
   // done.
   bool isSimplified = false;
   bool isCausalityAssigned = false;
+  bool Jpref = true;
 };
 
 static std::ostream &operator<<(std::ostream &os, BondGraph &g) {
   // First get all the sources
   std::vector<size_t> sources;
   g.getSources(sources);
+  // Then get all the inputs and outputs
+  std::vector<size_t> is;
+  std::vector<size_t> oos;
+
+  g.getIOs(oos, is);
+  for (size_t j : oos) {
+    size_t inPorts = std::visit(
+        [&](const auto &x) { return x->getPortWithType(PortType::IN).size(); },
+        g.getComponentAt(j));
+    size_t outPorts = std::visit(
+        [&](const auto &x) { return x->getPortWithType(PortType::OUT).size(); },
+        g.getComponentAt(j));
+    // Only if the output has nothing going out
+    if (outPorts == 0 && inPorts == 1)
+      sources.emplace_back(g.getRedges()[j][0]);
+  }
+
+  for (size_t j : is) {
+    size_t inPorts = std::visit(
+        [&](const auto &x) { return x->getPortWithType(PortType::IN).size(); },
+        g.getComponentAt(j));
+    size_t outPorts = std::visit(
+        [&](const auto &x) { return x->getPortWithType(PortType::OUT).size(); },
+        g.getComponentAt(j));
+    // Only if the input has nothing coming in
+    if (inPorts == 0 && outPorts == 1)
+      sources.emplace_back(g.getEdges()[j][0]);
+  }
   // Then visit the graph and apply the print function to everything
   auto visitor = [&os](auto &x) { os << *x << "\n"; };
   g.dfs(sources, visitor);

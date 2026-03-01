@@ -46,6 +46,9 @@ struct Number {
   bool pushSymbol(std::stack<size_t *> &, std::vector<expression_t> &) {
     return false;
   }
+  bool isAlgebraic(const Symbol &s, const expressionAst &) const {
+    return false;
+  }
   template <NumericType T>
   bool subs(const consts_t<T> &, std::vector<expression_t> &_) {
     return false;
@@ -76,6 +79,9 @@ struct Symbol {
   Symbol(Symbol &&) = default;
   bool pushSymbol(std::stack<size_t *> &, std::vector<expression_t> &_) {
     return (!isConst);
+  }
+  bool isAlgebraic(const Symbol &s, const expressionAst &) const {
+    return s.getName() == name;
   }
   template <NumericType T>
   bool subs(const consts_t<T> &consts, std::vector<expression_t> &_) {
@@ -189,6 +195,16 @@ template <EOP op> struct Expression {
     if (res)
       q.push(&right);
     return false;
+  }
+
+  bool isAlgebraic(const Symbol &s, const expressionAst &arena) const {
+    bool isleftT =
+        std::visit([&](const auto &x) { return x.isAlgebraic(s, arena); },
+                   arena[getLeft()]);
+    bool isrightT =
+        std::visit([&](const auto &x) { return x.isAlgebraic(s, arena); },
+                   arena[getRight()]);
+    return (isleftT || isrightT);
   }
 
   // Now the evaulator for the expression
@@ -381,10 +397,14 @@ struct expressionAst {
                       arena[expr]);
   }
 
+  // Check if there is a symbol that is the same as on the left
+  bool isAlgebraic(const Symbol &s, const expression_t &expr) const {
+    return std::visit([&](const auto &x) { return x.isAlgebraic(s, *this); }, expr);
+  }
+
   // Simplification algorithm
   void simplify(size_t eq_index, const std::vector<size_t> &eqs) {
     std::stack<size_t *> q;
-    // std::queue<size_t *> q;
     Expression<EOP::EQ> *res =
         std::get_if<Expression<EOP::EQ>>(&arena[eq_index]);
     if (res != nullptr) {
@@ -401,40 +421,24 @@ struct expressionAst {
       T t = std::visit([](const auto &x) { return x.getT(); }, arena[*torep]);
       assert(t == T::SYM);
       Symbol *torepsym = (Symbol *)&arena[*torep];
-      // Go through the eqs
-      size_t counter = 0;
-      bool added = false;
       for (size_t jj : eqs) {
         Expression<EOP::EQ> *x = std::get_if<Expression<EOP::EQ>>(&arena[jj]);
         assert(x != nullptr);
         Symbol *eqls = std::get_if<Symbol>(&arena[x->getLeft()]);
         if (eqls != nullptr && torepsym->getName() == eqls->getName()) {
-          if (visited[counter]) {
-            x->print_expr(std::cerr, *this);
-            std::cerr << "\n";
-            throw std::runtime_error("Algebraic Loop");
+          if (isAlgebraic(*eqls, arena[x->getRight()])) {
+            throw std::runtime_error("Algebraic loop detected");
           }
-          visited[counter] = true;
           *torep = x->getRight(); // replaced
           if (getNonConstSymbols(*torep, q)) {
             q.push(torep);
           }
-          added = true;
           break;
         } else if (eqls == nullptr) {
           x->print_expr(std::cerr, *this);
           std::cerr << "\n";
           throw std::runtime_error("Left side of equality is not a symbol");
         }
-        ++counter;
-      }
-      // XXX: This may not be completely correct/solid, because we
-      // should only be removing visited whose eqs (indices) do not have
-      // any parts of their (right side) expression left in the stack.
-      if (!added) {
-        // Just reset the visited vector
-        for (size_t k = 0; k < visited.size(); ++k)
-          visited[k] = false;
       }
     }
   }

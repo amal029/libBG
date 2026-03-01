@@ -113,7 +113,7 @@ int main() {
   l3.component2Signal("l3", Causality::Flow);
   
   // The initial values for this system
-  // storage_map_t<double> initialValues{{&l1, 0}, {&l2, 1}, {&l3, 10}};
-  bg.generateModellica(ast, std::move(constsm));
+  storage_map_t<double> initialValues{{&l1, 1}, {&l2, 0}, {&l3, 0}};
+  bg.generateModellica(ast, std::move(constsm), std::move(initialValues));
   return 0;
 }
