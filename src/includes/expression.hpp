@@ -325,7 +325,6 @@ struct expressionAst {
   [[nodiscard]]
   static constexpr const expression_t &
   getSymbolExpression(expressionAst &ast, std::string_view ss) {
-    std::cout << ss << "\n";
     std::vector<size_t> eqs = ast.getEQ();
     try {
       return pr_getStateEq(ast, ss, eqs);

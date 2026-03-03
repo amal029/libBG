@@ -356,7 +356,7 @@ struct BondGraph {
 
     // This is the final output
     std::string ders;
-    ders.reserve(100); // we are reserving a huge amount here
+    ders.reserve(100);
     // Get the differential equations in output string for every storage
     // element?
     for (const storageVariant &x : storageElements) {
@@ -380,6 +380,7 @@ struct BondGraph {
     // Now make the input and outputs
     for (const IO &x : moduldatedInputs) { // -- modulated values
       // comes from outside
+      IOStrings += "// modulated input signal \n";
       IOStrings += "input Real " + (std::string)x.output + ";\n";
       // The inside real value
       IOStrings += "Real " + (std::string)x.input + ";\n";
@@ -397,7 +398,7 @@ struct BondGraph {
     std::string outputInputStrings;
     // Equalise the outputs to inputs here
     for (const IO &x : moduldatedInputs) {
-      outputInputStrings += (std::string)x.input = (std::string)x.output;
+      outputInputStrings += (std::string)x.input + "=" + (std::string)x.output;
       outputInputStrings += ";\n";
     }
     for (const IO &x : signalOutputs) {
@@ -448,7 +449,6 @@ struct BondGraph {
     }
     block += equations;
     block += "end " + name + ";";
-    // std::cout << block;
     // Write to the output file
     std::ofstream outFile("/tmp/" + name + ".mo");
     if (outFile.is_open()) {

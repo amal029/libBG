@@ -129,7 +129,8 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
     if (effort_signal.has_value()) {
       IO in{effort_signal.value(), getEffort(), T, Causality::Effort};
       toret.emplace_back(std::move(in));
-    } else if (flow_signal.has_value()) {
+    }
+    if (flow_signal.has_value()) {
       IO in{flow_signal.value(), getFlow(), T, Causality::Flow};
       toret.emplace_back(std::move(in));
     }
