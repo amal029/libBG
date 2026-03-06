@@ -1,0 +1,12 @@
+loadModel(Modelica);
+getErrorString();
+loadFile("inputCurrent.mo");
+getErrorString();
+loadFile("battery.mo");
+getErrorString();
+loadFile("batteryEnv.mo");
+getErrorString();
+loadFile("batteryModel.mo");
+getErrorString();
+simulate(batteryModel, stopTime=500, outputFormat="csv");
+getErrorstring();
