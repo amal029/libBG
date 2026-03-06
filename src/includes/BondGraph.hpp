@@ -381,12 +381,14 @@ struct BondGraph {
     for (const IO &x : moduldatedInputs) { // -- modulated values
       // comes from outside
       IOStrings += "// modulated input signal \n";
-      IOStrings += "input Real " + (std::string)x.output + ";\n";
+      IOStrings += "Modelica.Blocks.Interfaces.RealInput " +
+                   (std::string)x.output + ";\n";
       // The inside real value
       IOStrings += "Real " + (std::string)x.input + ";\n";
     }
     for (const IO &x : signalOutputs) { // -- the actual I/O requested by user
-      IOStrings += "output Real " + (std::string)x.output + ";\n";
+      IOStrings += "Modelica.Blocks.Interfaces.RealOutput " +
+                   (std::string)x.output + ";\n";
       if (x.t == ComponentType::R || x.t == ComponentType::I ||
           x.t == ComponentType::O ||
           (x.t == ComponentType::L && x.c == Causality::Effort) ||

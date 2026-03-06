@@ -107,16 +107,6 @@ int main() {
   battery.connect(j04, rp);
   battery.connect(output, j04);
 
-  // Give the output from all the r1, r2, r3, and rp resistors
-  r1.component2Signal("vr1", Causality::Effort);
-  r1.component2Signal("ir1", Causality::Flow);
-  r2.component2Signal("vr2", Causality::Effort);
-  r2.component2Signal("ir2", Causality::Flow);
-  r3.component2Signal("vr3", Causality::Effort);
-  r3.component2Signal("ir3", Causality::Flow);
-  rp.component2Signal("vrp", Causality::Effort);
-  rp.component2Signal("irp", Causality::Flow);
-
   battery.simplify();
 
   // Assign causality
@@ -135,7 +125,7 @@ int main() {
   component_map_t<double> consts;
   consts[&se] = 22; // theta_a
   consts[&ctheta1] = 615.3;
-  consts[&ctheta2] = 615.3;
+  consts[&ctheta2] = 106360;
   consts[&rtheta] = 0.01;
   consts[&rp] = 500;
   consts[&c1] = 51.079;
