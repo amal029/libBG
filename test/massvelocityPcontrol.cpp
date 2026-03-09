@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <variant>
 #include <vector>
 
 #define N 10000
@@ -46,41 +47,44 @@ void integrate(Solver<double> &s) {
   euler(toIntegrate, tspan, initial, N, M, t, xv.data());
   std::ofstream file("/tmp/test3.csv");
   assert(file.is_open());
-  file << "Time(sec), Velocity (m/sec)\n";
+  file << "Time(sec),Velocity (m/sec)\n";
   for (size_t j = 0; j < N + 1; ++j) {
-    file << t[j] << ", " << xv[j * M] << "\n";
+    file << t[j] << "," << xv[j * M] << "\n";
   }
   file.close();
 }
 
 int main(void) {
-  Component<ComponentType::L> i{"m"};
-  Component<ComponentType::J1> vel{"vel"};
-  Component<ComponentType::J0> con{"con"};
-  Component<ComponentType::J0> j0{"j0"};
-  Component<ComponentType::R> r{"k"};
-  Component<ComponentType::SE> se{"se"};
-  Component<ComponentType::SF> ref{"w"};
-  Component<ComponentType::O> y{"y"};
-
   BondGraph bg("Pcontrol", false);
-  bg.addComponent(&i);   // inductor
-  bg.addComponent(&vel); // velocity
-  bg.addComponent(&j0);  // output connection
-  bg.addComponent(&con); // controller
-  bg.addComponent(&r);   // P-control
-  bg.addComponent(&se);  // 0 volts
-  bg.addComponent(&ref); // reference point for p-controller
-  bg.addComponent(&y);   // output
+
+  size_t mid   = bg.addComponent(Component<ComponentType::L> {"m"});
+  size_t velid = bg.addComponent(Component<ComponentType::J1> {"vel"});
+  size_t conid = bg.addComponent(Component<ComponentType::J0> {"con"});
+  size_t j0id  = bg.addComponent(Component<ComponentType::J0> {"j0"});
+  size_t kid   = bg.addComponent(Component<ComponentType::R> {"k"});
+  size_t seid  = bg.addComponent(Component<ComponentType::SE> {"se"});
+  size_t wid   = bg.addComponent(Component<ComponentType::SF>{"w"});
+  size_t yid = bg.addComponent(Component<ComponentType::O>{"y"});
+
+  auto *m = std::get_if<Component<ComponentType::L>>(&bg.getComponentAt(mid));
+  auto *vel = std::get_if<Component<ComponentType::J1>>(&bg.getComponentAt(velid));
+  auto *con = std::get_if<Component<ComponentType::J0>>(&bg.getComponentAt(conid));
+  auto *j0 =
+      std::get_if<Component<ComponentType::J0>>(&bg.getComponentAt(j0id));
+  auto *k = std::get_if<Component<ComponentType::R>>(&bg.getComponentAt(kid));
+  auto *se =
+      std::get_if<Component<ComponentType::SE>>(&bg.getComponentAt(seid));
+  auto *w = std::get_if<Component<ComponentType::SF>>(&bg.getComponentAt(wid));
+  auto *y = std::get_if<Component<ComponentType::O>>(&bg.getComponentAt(yid));
 
   // Now connect the components
-  bg.connect(vel, i);
-  bg.connect(vel, y);
-  bg.connect(y, j0);
-  bg.connect(se, j0);
-  bg.connect(con, vel);
-  bg.connect(ref, con);
-  bg.connect(con, r);
+  bg.connect(*vel, *m);
+  bg.connect(*vel, *y);
+  bg.connect(*y, *j0);
+  bg.connect(*se, *j0);
+  bg.connect(*con, *vel);
+  bg.connect(*w, *con);
+  bg.connect(*con, *k);
 
   // Simplify the graph
   bg.simplify();
@@ -89,21 +93,21 @@ int main(void) {
   // State space representation
   expressionAst ast = bg.generateStateSpace();
   // Print the storage elements
-  print_state_eqns(i.getStateEq(ast), "m", ast);
+  print_state_eqns(m->getStateEq(ast), "m", ast);
 
   // Now just plot the thing
-  const double m = 20;
+  const double mv = 20;
   const double tau = 10;
 
   component_map_t<double> consts;
-  consts[&se] = 0;      // dummy input for effort
-  consts[&ref] = 2;     // refrence input for the controller (w)
-  consts[&i] = m;       // m value
-  consts[&r] = m / tau; // the P-control gain (kp)
+  consts[&bg.getComponentAt(seid)] = 0;      // dummy input for effort
+  consts[&bg.getComponentAt(wid)] = 2;     // refrence input for the controller (w)
+  consts[&bg.getComponentAt(mid)] = mv;       // m value
+  consts[&bg.getComponentAt(kid)] = mv / tau; // the P-control gain (kp)
 
-  std::vector<storageVariant> storageComponents{&i};
+  std::vector<storageVariant> storageComponents{m};
   Solver<double> s{ast, std::move(consts), storageComponents};
-  print_state_eqns(i.getStateEq(ast), "m", ast);
+  print_state_eqns(m->getStateEq(ast), "m", ast);
 
   // Integrate using euler solver
   integrate(s);

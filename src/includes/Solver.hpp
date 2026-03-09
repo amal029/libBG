@@ -9,7 +9,7 @@
 
 template <typename V = double>
 using component_map_t =
-    std::unordered_map<componentVariant, V, ComponentHash, ComponentEqual>;
+    std::unordered_map<componentVariantPtr, V, ComponentHash, ComponentEqual>;
 
 template <NumericType T = double> struct Solver {
   explicit Solver(expressionAst &ast, component_map_t<T> &&consts,
@@ -28,7 +28,7 @@ template <NumericType T = double> struct Solver {
     // Convert the component -> value map to string -> value map
     for (const auto &[k, v] : consts) {
       std::string_view vv = std::visit(
-          [](const auto &x) -> std::string_view { return x->getValue(); }, k);
+          [](const auto &x) -> std::string_view { return x.getValue(); }, *k);
       _consts[vv] = v;
     }
     // Here replace the constants with their values for all dxdt expressions

@@ -10,7 +10,6 @@
 #include <fstream>
 #include <iostream>
 #include <span>
-#include <unordered_map>
 #include <vector>
 
 void print_state_eqns(const expression_t &res, const char *name,
@@ -57,14 +56,14 @@ void integrate(Solver<double> &s) {
   assert(file.is_open());
   // First write the very first line
   // The header
-  file << "Time(sec), L1, L2, C, L3" << "\n";
+  file << "Time(sec),L1,L2,C,L3" << "\n";
   file << t << "," << xv[0] << "," << xv[1] << "," << xv[2] << "," << xv[3]
        << "\n";
   // Call the integrator -- one step mode
   while (FLAG != 2) {
     FLAG = r8_rkf45(toIntegrate, neqn, xv.data(), YP, &t, tout, &relerr, abserr,
                     -1);
-    file << t << ", " << xv[0] << "," << xv[1] << "," << xv[2] << "," << xv[3]
+    file << t << "," << xv[0] << "," << xv[1] << "," << xv[2] << "," << xv[3]
          << "\n";
   }
 
@@ -74,77 +73,88 @@ void integrate(Solver<double> &s) {
 }
 
 int main() {
-  Component<ComponentType::SE> se{"se"};
-  Component<ComponentType::J0> u0{"u0"};
-  Component<ComponentType::J1> j1{"j1"};
-  Component<ComponentType::J0> u12{"u12"};
-  Component<ComponentType::R> r{"r"};
-  Component<ComponentType::J0> u2{"u2"};
-  Component<ComponentType::J1> j2{"j2"};
-  Component<ComponentType::J0> u23{"u23"};
-  Component<ComponentType::L> l1{"l1"};
-  Component<ComponentType::J0> u3{"u3"};
-  Component<ComponentType::GY> gy{"gy"};
+  BondGraph bg("hoistingDevice");
+  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se"});
+  size_t u0id = bg.addComponent(Component<ComponentType::J0>{"u0"});
+  size_t j1id = bg.addComponent(Component<ComponentType::J1>{"j1"});
+  size_t u12id = bg.addComponent(Component<ComponentType::J0>{"u12"});
+  size_t rid = bg.addComponent(Component<ComponentType::R>{"r"});
+  size_t u2id = bg.addComponent(Component<ComponentType::J0>{"u2"});
+  size_t j2id = bg.addComponent(Component<ComponentType::J1>{"j2"});
+  size_t u23id = bg.addComponent(Component<ComponentType::J0>{"u23"});
+  size_t l1id = bg.addComponent(Component<ComponentType::L>{"l1"});
+  size_t u3id = bg.addComponent(Component<ComponentType::J0>{"u3"});
+  size_t gyid = bg.addComponent(Component<ComponentType::GY>{"gy"});
   // The new ones
-  Component<ComponentType::J1> o{"o"};
-  Component<ComponentType::L> l2{"l2"};
-  Component<ComponentType::R> r2{"r2"};
-  Component<ComponentType::TF> tf{"tf"};
+  size_t oid = bg.addComponent(Component<ComponentType::J1>{"o"});
+  size_t l2id = bg.addComponent(Component<ComponentType::L>{"l2"});
+  size_t r2id = bg.addComponent(Component<ComponentType::R>{"r2"});
+  size_t tfid = bg.addComponent(Component<ComponentType::TF>{"tf"});
 
   // This is the capacitance junction
-  Component<ComponentType::J0> v2{"v2"};
-  Component<ComponentType::C> c{"c"};
+  size_t v2id = bg.addComponent(Component<ComponentType::J0>{"v2"});
+  size_t cid = bg.addComponent(Component<ComponentType::C>{"c"});
 
-  Component<ComponentType::J1> v1{"v1"};
-  Component<ComponentType::SE> se2{"se2"};
-  Component<ComponentType::L> l3{"l3"};
+  size_t v1id = bg.addComponent(Component<ComponentType::J1>{"v1"});
+  size_t se2id = bg.addComponent(Component<ComponentType::SE>{"se2"});
+  size_t l3id = bg.addComponent(Component<ComponentType::L>{"l3"});
 
   // Now add these to the bondgraph
-  BondGraph bg("hoistingDevice");
-  bg.addComponent(&se);
-  bg.addComponent(&u0);
-  bg.addComponent(&j1);
-  bg.addComponent(&u12);
-  bg.addComponent(&r);
-  bg.addComponent(&u2);
-  bg.addComponent(&j2);
-  bg.addComponent(&u23);
-  bg.addComponent(&l1);
-  bg.addComponent(&u3);
-  bg.addComponent(&gy);
-  bg.addComponent(&o);
-  bg.addComponent(&l2);
-  bg.addComponent(&r2);
-  bg.addComponent(&tf);
-  // Add the extra components
-  bg.addComponent(&v2);
-  bg.addComponent(&c);
-
-  bg.addComponent(&v1);
-  bg.addComponent(&se2);
-  bg.addComponent(&l3);
+  auto *se =
+      std::get_if<Component<ComponentType::SE>>(&bg.getComponentAt(seid));
+  auto *u0 =
+      std::get_if<Component<ComponentType::J0>>(&bg.getComponentAt(u0id));
+  auto *j1 =
+      std::get_if<Component<ComponentType::J1>>(&bg.getComponentAt(j1id));
+  auto *u12 =
+      std::get_if<Component<ComponentType::J0>>(&bg.getComponentAt(u12id));
+  auto *r = std::get_if<Component<ComponentType::R>>(&bg.getComponentAt(rid));
+  auto *u2 =
+      std::get_if<Component<ComponentType::J0>>(&bg.getComponentAt(u2id));
+  auto *j2 =
+      std::get_if<Component<ComponentType::J1>>(&bg.getComponentAt(j2id));
+  auto *u23 =
+      std::get_if<Component<ComponentType::J0>>(&bg.getComponentAt(u23id));
+  auto *l1 = std::get_if<Component<ComponentType::L>>(&bg.getComponentAt(l1id));
+  auto *u3 =
+      std::get_if<Component<ComponentType::J0>>(&bg.getComponentAt(u3id));
+  auto *gy =
+      std::get_if<Component<ComponentType::GY>>(&bg.getComponentAt(gyid));
+  auto *o = std::get_if<Component<ComponentType::J1>>(&bg.getComponentAt(oid));
+  auto *l2 = std::get_if<Component<ComponentType::L>>(&bg.getComponentAt(l2id));
+  auto *r2 = std::get_if<Component<ComponentType::R>>(&bg.getComponentAt(r2id));
+  auto *tf =
+      std::get_if<Component<ComponentType::TF>>(&bg.getComponentAt(tfid));
+  auto *v2 =
+      std::get_if<Component<ComponentType::J0>>(&bg.getComponentAt(v2id));
+  auto *c = std::get_if<Component<ComponentType::C>>(&bg.getComponentAt(cid));
+  auto *v1 =
+      std::get_if<Component<ComponentType::J1>>(&bg.getComponentAt(v1id));
+  auto *se2 =
+      std::get_if<Component<ComponentType::SE>>(&bg.getComponentAt(se2id));
+  auto *l3 = std::get_if<Component<ComponentType::L>>(&bg.getComponentAt(l3id));
 
   // Now connect components
-  bg.connect(se, u0);
-  bg.connect(u0, j1);
-  bg.connect(j1, u12);
-  bg.connect(u12, r);
-  bg.connect(j1, u2);
-  bg.connect(u2, j2);
-  bg.connect(j2, u23);
-  bg.connect(u23, l1);
-  bg.connect(j2, u3);
-  bg.connect(u3, gy);
-  bg.connect(gy, o);
-  bg.connect(o, l2);
-  bg.connect(o, r2);
-  bg.connect(o, tf);
+  bg.connect(*se, *u0);
+  bg.connect(*u0, *j1);
+  bg.connect(*j1, *u12);
+  bg.connect(*u12, *r);
+  bg.connect(*j1, *u2);
+  bg.connect(*u2, *j2);
+  bg.connect(*j2, *u23);
+  bg.connect(*u23, *l1);
+  bg.connect(*j2, *u3);
+  bg.connect(*u3, *gy);
+  bg.connect(*gy, *o);
+  bg.connect(*o, *l2);
+  bg.connect(*o, *r2);
+  bg.connect(*o, *tf);
 
-  bg.connect(tf, v2);
-  bg.connect(v2, c);
-  bg.connect(v2, v1);
-  bg.connect(se2, v1);
-  bg.connect(v1, l3);
+  bg.connect(*tf, *v2);
+  bg.connect(*v2, *c);
+  bg.connect(*v2, *v1);
+  bg.connect(*se2, *v1);
+  bg.connect(*v1, *l3);
 
   // Try simplifying this graph
   bg.simplify(); // works fine.
@@ -154,10 +164,10 @@ int main() {
 
   // Now produce the state space equations
   expressionAst ast = bg.generateStateSpace();
-  const expression_t &res = l1.getStateEq(ast);
-  const expression_t &res2 = l2.getStateEq(ast);
-  const expression_t &resc = c.getStateEq(ast);
-  const expression_t &res3 = l3.getStateEq(ast);
+  const expression_t &res = l1->getStateEq(ast);
+  const expression_t &res2 = l2->getStateEq(ast);
+  const expression_t &resc = c->getStateEq(ast);
+  const expression_t &res3 = l3->getStateEq(ast);
 
   print_state_eqns(res, "l1", ast);
   print_state_eqns(res2, "l2", ast);
@@ -167,17 +177,18 @@ int main() {
   // Get the slope of a given state equation
   // Make the consts first
   component_map_t<double> consts;
-  consts[&se] = 1.0;
-  consts[&r] = 1;
-  consts[&l1] = 2;
-  consts[&gy] = 2;
-  consts[&l2] = 2;
-  consts[&r2] = 1;
-  consts[&tf] = -2;
-  consts[&c] = 2;
-  consts[&se2] = -2;
-  consts[&l3] = 2;
-  std::vector<storageVariant> storageComponents{&l1, &l2, &c, &l3};
+  consts[&bg.getComponentAt(seid)] = 1.0;
+  consts[&bg.getComponentAt(rid)] = 1;
+  consts[&bg.getComponentAt(l1id)] = 2;
+  consts[&bg.getComponentAt(gyid)] = 2;
+  consts[&bg.getComponentAt(l2id)] = 2;
+  consts[&bg.getComponentAt(r2id)] = 1;
+  consts[&bg.getComponentAt(tfid)] = -2;
+  consts[&bg.getComponentAt(cid)] = 2;
+  consts[&bg.getComponentAt(se2id)] = -2;
+  consts[&bg.getComponentAt(l3id)] = 2;
+
+  std::vector<storageVariant> storageComponents{l1, l2, c, l3};
   Solver<double> s{ast, std::move(consts), storageComponents};
   // Print the things again
   print_state_eqns(res, "l1", ast);
@@ -189,18 +200,19 @@ int main() {
   integrate(s);
   // Generate modellica code
   component_map_t<double> constsm;
-  constsm[&se] = 1.0;
-  constsm[&r] = 1;
-  constsm[&l1] = 2;
-  constsm[&gy] = 2;
-  constsm[&l2] = 2;
-  constsm[&r2] = 1;
-  constsm[&tf] = -2;
-  constsm[&c] = 2;
-  constsm[&se2] = -2;
-  constsm[&l3] = 2;
+  constsm[&bg.getComponentAt(seid)] = 1.0;
+  constsm[&bg.getComponentAt(rid)] = 1;
+  constsm[&bg.getComponentAt(l1id)] = 2;
+  constsm[&bg.getComponentAt(gyid)] = 2;
+  constsm[&bg.getComponentAt(l2id)] = 2;
+  constsm[&bg.getComponentAt(r2id)] = 1;
+  constsm[&bg.getComponentAt(tfid)] = -2;
+  constsm[&bg.getComponentAt(cid)] = 2;
+  constsm[&bg.getComponentAt(se2id)] = -2;
+  constsm[&bg.getComponentAt(l3id)] = 2;
+
   // The initial values for this system
-  storage_map_t<double> initialValues{{&l1, 0}, {&l2, 1}, {&c, 1}, {&l3, 10}};
+  storage_map_t<double> initialValues{{l1, 0}, {l2, 1}, {c, 1}, {l3, 10}};
   bg.generateModellica(ast, std::move(constsm), std::move(initialValues));
   return 0;
 }

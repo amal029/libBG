@@ -8,7 +8,7 @@ def main(f):
     df = pd.read_csv(f)
     print(df.info())
     df = df.set_index(df['time'])
-    df[['bat.vp']].plot()
+    df[['bat.vp', 'bat.InputB']].plot()
     plt.show()
 
 

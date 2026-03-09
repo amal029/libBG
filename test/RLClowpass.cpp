@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <variant>
 #include <vector>
 
 void print_state_eqns(const expression_t &res, const char *name,
@@ -47,66 +48,71 @@ void integrate(Solver<double> &s) {
   euler(toIntegrate, tspan, initial, N, 2, t, xv.data());
   std::ofstream file("/tmp/test1.csv");
   assert(file.is_open());
-  file << "Time(sec), L, C\n";
+  file << "Time(sec),L,C\n";
   for (size_t j = 0; j < N + 1; ++j) {
-    file << t[j] << ", " << xv[j * M] << ", " << xv[1 + j * M] << "\n";
+    file << t[j] << "," << xv[j * M] << "," << xv[1 + j * M] << "\n";
   }
   file.close();
 }
 
 int main() {
-  Component<ComponentType::SE> se{"se"}; // voltage (effort) source
-  Component<ComponentType::R> r{"r"};    // resistor
-  Component<ComponentType::C> c{"c"};    // capacitor
-  Component<ComponentType::L> l{"l"};    // inductor
-  Component<ComponentType::J1> j1{"j1"}; // 1 Junction (in series)
-  Component<ComponentType::J0> j0{"j0"}; // 0 Junction (in parallel)
   BondGraph bg("RLClowpass");
-  bg.addComponent(&se);
-  bg.addComponent(&r);
-  bg.addComponent(&c);
-  bg.addComponent(&l);
-  bg.addComponent(&j1);
-  bg.addComponent(&j0);
+  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se"});
+  size_t rid = bg.addComponent(Component<ComponentType::R>{"r"});
+  size_t cid = bg.addComponent(Component<ComponentType::C>{"c"});
+  size_t lid = bg.addComponent(Component<ComponentType::L>{"l"});
+  size_t j1id = bg.addComponent(Component<ComponentType::J1>{"j1"});
+  size_t j0id = bg.addComponent(Component<ComponentType::J0>{"j0"});
 
+  auto *se =
+      std::get_if<Component<ComponentType::SE>>(&bg.getComponentAt(seid));
+  auto *j1 =
+      std::get_if<Component<ComponentType::J1>>(&bg.getComponentAt(j1id));
+  auto *r = std::get_if<Component<ComponentType::R>>(&bg.getComponentAt(rid));
+  auto *c = std::get_if<Component<ComponentType::C>>(&bg.getComponentAt(cid));
+  auto *l = std::get_if<Component<ComponentType::L>>(&bg.getComponentAt(lid));
+  auto *j0 =
+      std::get_if<Component<ComponentType::J0>>(&bg.getComponentAt(j0id));
+  
   // Now make the connections
-  bg.connect(se, j1);
-  bg.connect(j1, l);
-  bg.connect(j1, j0);
-  bg.connect(j0, c);
-  bg.connect(j0, r);
+  bg.connect(*se, *j1);
+  bg.connect(*j1, *l);
+  bg.connect(*j1, *j0);
+  bg.connect(*j0, *c);
+  bg.connect(*j0, *r);
 
   // Test try to simplify it
   bg.simplify();
   // Perform causality analysis
   bg.assignCausality();
+
   // Get the state equations
   expressionAst ast = bg.generateStateSpace();
   // Print the state equations
-  print_state_eqns(l.getStateEq(ast), "L", ast);
-  print_state_eqns(c.getStateEq(ast), "C", ast);
+  print_state_eqns(l->getStateEq(ast), "L", ast);
+  print_state_eqns(c->getStateEq(ast), "C", ast);
 
   // Set the constant value
   // XXX: These should be expression types
   component_map_t<double> consts;
-  consts[&se] = 24;
-  consts[&c] = 1e-3;
-  consts[&l] = 1;
-  consts[&r] = 100;
+  consts[&bg.getComponentAt(seid)] = 24;
+  consts[&bg.getComponentAt(cid)] = 1e-3;
+  consts[&bg.getComponentAt(lid)] = 1;
+  consts[&bg.getComponentAt(rid)] = 100;
 
-  std::vector<storageVariant> storageComponents{&l, &c};
+  std::vector<storageVariant> storageComponents{l, c};
   Solver<double> s{ast, std::move(consts), storageComponents};
-  print_state_eqns(l.getStateEq(ast), "L", ast);
-  print_state_eqns(c.getStateEq(ast), "C", ast);
+  print_state_eqns(l->getStateEq(ast), "L", ast);
+  print_state_eqns(c->getStateEq(ast), "C", ast);
 
   // Integrate using euler solver
   integrate(s);
   // Now generate the modellica code
   component_map_t<double> constsM;
-  constsM[&se] = 24;
-  constsM[&c] = 1e-3;
-  constsM[&l] = 1;
-  constsM[&r] = 100;
+  constsM[&bg.getComponentAt(seid)] = 24;
+  constsM[&bg.getComponentAt(cid)] = 1e-3;
+  constsM[&bg.getComponentAt(lid)] = 1;
+  constsM[&bg.getComponentAt(rid)] = 100;
 
   bg.generateModellica(ast, std::move(constsM));
   return 0;

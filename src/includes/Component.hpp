@@ -431,41 +431,44 @@ private:
 
 // This is the variant with all the different components
 using componentVariant =
-    std::variant<Component<ComponentType::C, Modulated::T> *,
-                 Component<ComponentType::C, Modulated::F> *,
-                 Component<ComponentType::L, Modulated::T> *,
-                 Component<ComponentType::L, Modulated::F> *,
-                 Component<ComponentType::J0, Modulated::F> *,
-                 Component<ComponentType::J0, Modulated::T> *,
-                 Component<ComponentType::J1, Modulated::T> *,
-                 Component<ComponentType::J1, Modulated::F> *,
-                 Component<ComponentType::R, Modulated::T> *,
-                 Component<ComponentType::R, Modulated::F> *,
-                 Component<ComponentType::SE, Modulated::T> *,
-                 Component<ComponentType::SE, Modulated::F> *,
-                 Component<ComponentType::SF, Modulated::T> *,
-                 Component<ComponentType::SF, Modulated::F> *,
-                 Component<ComponentType::GY, Modulated::T> *,
-                 Component<ComponentType::GY, Modulated::F> *,
-                 Component<ComponentType::TF, Modulated::T> *,
-                 Component<ComponentType::TF, Modulated::F> *,
-                 Component<ComponentType::I, Modulated::T> *,
-                 Component<ComponentType::I, Modulated::F> *,
-                 Component<ComponentType::O, Modulated::T> *,
-                 Component<ComponentType::O, Modulated::F> *>;
+    std::variant<Component<ComponentType::C, Modulated::T>,
+                 Component<ComponentType::C, Modulated::F>,
+                 Component<ComponentType::L, Modulated::T>,
+                 Component<ComponentType::L, Modulated::F>,
+                 Component<ComponentType::J0, Modulated::F>,
+                 Component<ComponentType::J0, Modulated::T>,
+                 Component<ComponentType::J1, Modulated::T>,
+                 Component<ComponentType::J1, Modulated::F>,
+                 Component<ComponentType::R, Modulated::T>,
+                 Component<ComponentType::R, Modulated::F>,
+                 Component<ComponentType::SE, Modulated::T>,
+                 Component<ComponentType::SE, Modulated::F>,
+                 Component<ComponentType::SF, Modulated::T>,
+                 Component<ComponentType::SF, Modulated::F>,
+                 Component<ComponentType::GY, Modulated::T>,
+                 Component<ComponentType::GY, Modulated::F>,
+                 Component<ComponentType::TF, Modulated::T>,
+                 Component<ComponentType::TF, Modulated::F>,
+                 Component<ComponentType::I, Modulated::T>,
+                 Component<ComponentType::I, Modulated::F>,
+                 Component<ComponentType::O, Modulated::T>,
+                 Component<ComponentType::O, Modulated::F>>;
+
+using componentVariantPtr = componentVariant *;
 
 // The hash required to make a map of Component pointers
 struct ComponentHash {
-  std::size_t operator()(const componentVariant component) const noexcept {
+  std::size_t operator()(const componentVariantPtr component) const noexcept {
     return std::hash<size_t>{}(
-        std::visit([](const auto &x) { return x->getID(); }, component));
+        std::visit([](const auto &x) { return x.getID(); }, *component));
   }
 };
 
 struct ComponentEqual {
-  bool operator()(componentVariant lhs, componentVariant rhs) const noexcept {
-    size_t lname = std::visit([](const auto &x) { return x->getID(); }, lhs);
-    size_t rname = std::visit([](const auto &x) { return x->getID(); }, rhs);
+  bool operator()(componentVariantPtr lhs,
+                  componentVariantPtr rhs) const noexcept {
+    size_t lname = std::visit([](const auto &x) { return x.getID(); }, *lhs);
+    size_t rname = std::visit([](const auto &x) { return x.getID(); }, *rhs);
     return lname == rname;
   }
 };

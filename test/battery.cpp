@@ -8,14 +8,12 @@
 #include <iostream>
 
 
-
 void print_state_eqns(const expression_t &res, const char *name,
                       expressionAst &ast) {
   std::cout << std::format("State eq {}: ", name);
   print_expression_t(std::cout, res, ast);
   std::cout << "\n";
 }
-
 
 int main() {
   // The capacitors
