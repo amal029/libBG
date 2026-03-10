@@ -2,29 +2,29 @@
 #include "Component.hpp"
 // #include "expression.hpp"
 #include <iostream>
+#include <variant>
 
 int main() {
 
-  // Declare a Capacitor
-  Component<ComponentType::C> c{"c"};    // capacitor
-  Component<ComponentType::SE> se{"se"}; // voltage (effort) source
-  Component<ComponentType::R> r{"r"};    // resistor
-  Component<ComponentType::J1> j{"1"};   // 1 Junction (in series)
-
-
-  // // Add the components to the BondGraph
+  // Add the components to the BondGraph
   BondGraph bg("ex1");
-  bg.addComponent(&c);
-  bg.addComponent(&se);
-  bg.addComponent(&r);
-  bg.addComponent(&j);
+  size_t cid = bg.addComponent(Component<ComponentType::C>{"c"});
+  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se"});
+  size_t rid = bg.addComponent(Component<ComponentType::R>{"r"});
+  size_t id1 = bg.addComponent(Component<ComponentType::J1>{"1"});
+
+  auto *c = std::get_if<Component<ComponentType::C>>(&bg.getComponentAt(cid));
+  auto *se =
+      std::get_if<Component<ComponentType::SE>>(&bg.getComponentAt(seid));
+  auto *r = std::get_if<Component<ComponentType::R>>(&bg.getComponentAt(rid));
+  auto *j = std::get_if<Component<ComponentType::J1>>(&bg.getComponentAt(id1));
 
   // Make the connections -- we don't have to do it this way. We can use
   // the moved object, but be careful in that case -- it is
   // implementation defined then.
-  bg.connect(se, j);
-  bg.connect(j, r);
-  bg.connect(j, c);
+  bg.connect(*se, *j);
+  bg.connect(*j, *r);
+  bg.connect(*j, *c);
 
   // Print the bond graph
   std::cout << bg; // This is done by traversing the graph
