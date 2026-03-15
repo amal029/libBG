@@ -3,6 +3,7 @@
 #include "Component.hpp"
 #include "exception.hpp"
 #include "expression.hpp"
+#include "util.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -18,7 +19,6 @@
 #include <utility>
 #include <variant>
 #include <vector>
-#include <cassert>
 
 struct BondGraph {
   // Public methods
@@ -450,6 +450,7 @@ struct BondGraph {
 
   const std::vector<std::vector<size_t>> &getRedges() const { return redges; }
   const std::vector<std::vector<size_t>> &getEdges() const { return edges; }
+  const char *getName() const { return name; }
 
 private:
   // Gets the name of the storage elements
