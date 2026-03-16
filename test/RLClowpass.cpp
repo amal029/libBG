@@ -86,6 +86,10 @@ int main() {
   // Perform causality analysis
   bg.assignCausality();
 
+  std::cout << bg << "\n";
+  BondGraph bgc = bg;
+  std::cout << bgc << "\n";
+
   // Get the state equations
   expressionAst ast = bg.generateStateSpace();
   // Print the state equations

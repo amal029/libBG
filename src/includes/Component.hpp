@@ -60,9 +60,9 @@ struct Port {
       : in(Causality::ACausal), out(Causality::ACausal), nID(ID), mType(t) {}
   constexpr bool getAssigned() const { return assigned; }
   void setAssigned() { assigned = true; }
-  Port(const Port &) = delete;
+  Port(const Port &) = default;
   Port(Port &&) = default;
-  Port &operator=(const Port &) = delete;
+  Port &operator=(const Port &) = default;
   Port &operator=(Port &&) = default;
   ~Port() {}
 
@@ -108,9 +108,9 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
   constexpr Component(const char *n) : name(n), ID(Util::getID()), myT(T) {
     value = (name + std::string("_") + std::to_string(ID));
   }
-  constexpr Component(const Component &) = delete;
+  constexpr Component(const Component &) = default;
   constexpr Component(Component &&) = default;
-  constexpr Component &operator=(const Component &) = delete;
+  constexpr Component &operator=(const Component &) = default;
   constexpr Component &operator=(Component &&) = default;
   ~Component() {}
 
@@ -428,6 +428,14 @@ private:
   bool deleted = false; // Has this been deleted from the graph
                         // during simplification.
 };
+
+// The junction variants
+using junctionVariantPtr =
+    std::variant<Component<ComponentType::J0, Modulated::T>*,
+                 Component<ComponentType::J0, Modulated::F>*,
+                 Component<ComponentType::J1, Modulated::T>*,
+                 Component<ComponentType::J1, Modulated::F>*>;
+// using junctionVariantPtr = junctionVariant *;
 
 // This is the variant with all the different components
 using componentVariant =
