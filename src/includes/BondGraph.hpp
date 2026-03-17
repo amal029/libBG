@@ -37,7 +37,9 @@ template <size_t N = 64> struct BondGraph {
   size_t addComponent(Component<T, M> &&x, bool extend = false) {
     // We need to push the pointer to the correct position according to
     // the ID of the component.
-    size_t els = x.getID();
+    size_t els = getID();
+    x.setID(els);
+    x.setValue();
     if (!extend) {
       if (components.size() <= els) {
         // Then increase the size of the vector
@@ -479,7 +481,7 @@ template <size_t N = 64> struct BondGraph {
       // XXX: Set the value of the SE to zero
       size_t j;
       if (T == ComponentType::J0) {
-        j = addComponent(Component<ComponentType::SE>{"se", getID()}, true);
+        j = addComponent(Component<ComponentType::SE>{"se"}, true);
         auto *jc =
             std::get_if<Component<ComponentType::SE>>(&getComponentAt(j));
         jc->addPort(Port(PortType::OUT, edges[id][i]));
@@ -489,7 +491,7 @@ template <size_t N = 64> struct BondGraph {
         // This is allocating to components, but ID is being obtained
         // from a static variable, which is shared between different
         // bondgraphs -- this does not work.
-        j = addComponent(Component<ComponentType::SF>{"sf", getID()}, true);
+        j = addComponent(Component<ComponentType::SF>{"sf"}, true);
         std::cout << components.size() << "\n";
         auto *jc =
             std::get_if<Component<ComponentType::SF>>(&getComponentAt(j));
@@ -522,13 +524,13 @@ template <size_t N = 64> struct BondGraph {
     for (size_t i = 0; i < iedge_size; ++i) {
       size_t j;
       if (T == ComponentType::J0) {
-        j = addComponent(Component<ComponentType::SE>{"se", getID()}, true);
+        j = addComponent(Component<ComponentType::SE>{"se"}, true);
         auto *jc =
             std::get_if<Component<ComponentType::SE>>(&getComponentAt(j));
         jc->addPort(Port(PortType::IN, redges[id][i]));
 
       } else if (T == ComponentType::J1) {
-        j = addComponent(Component<ComponentType::SF>{"sf", getID()}, true);
+        j = addComponent(Component<ComponentType::SF>{"sf"}, true);
         auto *jc =
             std::get_if<Component<ComponentType::SF>>(&getComponentAt(j));
         jc->addPort(Port(PortType::IN, redges[id][i]));

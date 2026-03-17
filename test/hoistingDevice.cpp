@@ -74,30 +74,30 @@ void integrate(Solver<double> &s) {
 
 int main() {
   BondGraph bg("hoistingDevice");
-  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se", bg.getID()});
-  size_t u0id = bg.addComponent(Component<ComponentType::J0>{"u0", bg.getID()});
-  size_t j1id = bg.addComponent(Component<ComponentType::J1>{"j1", bg.getID()});
-  size_t u12id = bg.addComponent(Component<ComponentType::J0>{"u12", bg.getID()});
-  size_t rid = bg.addComponent(Component<ComponentType::R>{"r", bg.getID()});
-  size_t u2id = bg.addComponent(Component<ComponentType::J0>{"u2", bg.getID()});
-  size_t j2id = bg.addComponent(Component<ComponentType::J1>{"j2", bg.getID()});
-  size_t u23id = bg.addComponent(Component<ComponentType::J0>{"u23", bg.getID()});
-  size_t l1id = bg.addComponent(Component<ComponentType::L>{"l1", bg.getID()});
-  size_t u3id = bg.addComponent(Component<ComponentType::J0>{"u3", bg.getID()});
-  size_t gyid = bg.addComponent(Component<ComponentType::GY>{"gy", bg.getID()});
+  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se"});
+  size_t u0id = bg.addComponent(Component<ComponentType::J0>{"u0"});
+  size_t j1id = bg.addComponent(Component<ComponentType::J1>{"j1"});
+  size_t u12id = bg.addComponent(Component<ComponentType::J0>{"u12"});
+  size_t rid = bg.addComponent(Component<ComponentType::R>{"r"});
+  size_t u2id = bg.addComponent(Component<ComponentType::J0>{"u2"});
+  size_t j2id = bg.addComponent(Component<ComponentType::J1>{"j2"});
+  size_t u23id = bg.addComponent(Component<ComponentType::J0>{"u23"});
+  size_t l1id = bg.addComponent(Component<ComponentType::L>{"l1"});
+  size_t u3id = bg.addComponent(Component<ComponentType::J0>{"u3"});
+  size_t gyid = bg.addComponent(Component<ComponentType::GY>{"gy"});
   // The new ones
-  size_t oid = bg.addComponent(Component<ComponentType::J1>{"o", bg.getID()});
-  size_t l2id = bg.addComponent(Component<ComponentType::L>{"l2", bg.getID()});
-  size_t r2id = bg.addComponent(Component<ComponentType::R>{"r2", bg.getID()});
-  size_t tfid = bg.addComponent(Component<ComponentType::TF>{"tf", bg.getID()});
+  size_t oid = bg.addComponent(Component<ComponentType::J1>{"o"});
+  size_t l2id = bg.addComponent(Component<ComponentType::L>{"l2"});
+  size_t r2id = bg.addComponent(Component<ComponentType::R>{"r2"});
+  size_t tfid = bg.addComponent(Component<ComponentType::TF>{"tf"});
 
   // This is the capacitance junction
-  size_t v2id = bg.addComponent(Component<ComponentType::J0>{"v2", bg.getID()});
-  size_t cid = bg.addComponent(Component<ComponentType::C>{"c", bg.getID()});
+  size_t v2id = bg.addComponent(Component<ComponentType::J0>{"v2"});
+  size_t cid = bg.addComponent(Component<ComponentType::C>{"c"});
 
-  size_t v1id = bg.addComponent(Component<ComponentType::J1>{"v1", bg.getID()});
-  size_t se2id = bg.addComponent(Component<ComponentType::SE>{"se2", bg.getID()});
-  size_t l3id = bg.addComponent(Component<ComponentType::L>{"l3", bg.getID()});
+  size_t v1id = bg.addComponent(Component<ComponentType::J1>{"v1"});
+  size_t se2id = bg.addComponent(Component<ComponentType::SE>{"se2"});
+  size_t l3id = bg.addComponent(Component<ComponentType::L>{"l3"});
 
   // Now add these to the bondgraph
   auto *se =

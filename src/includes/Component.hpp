@@ -17,13 +17,6 @@
 #include <variant>
 #include <vector>
 
-// struct Util {
-//   static size_t getID() {
-//     static size_t counter = 0;
-//     return counter++;
-//   }
-// };
-
 // The type of components that are allowed in the Bond Graph
 enum class ComponentType : std::uint8_t {
   C = 0,
@@ -105,9 +98,7 @@ private:
 // The common Component class
 template <ComponentType T, Modulated M = Modulated::F> struct Component {
   constexpr Component() {} // This is for Bond Graph insertion
-  constexpr Component(const char *n, size_t id) : name(n), ID(id), myT(T) {
-    value = (name + std::string("_") + std::to_string(ID));
-  }
+  constexpr Component(const char *n) : name(n), myT(T) {}
   constexpr Component(const Component &) = default;
   constexpr Component(Component &&) = default;
   constexpr Component &operator=(const Component &) = default;
@@ -117,6 +108,7 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
   // The public methods
   constexpr const char *getName() const { return name; }
   constexpr size_t getID() const { return ID; }
+  constexpr void setID(size_t id) { ID = id; }
   constexpr ComponentType getType() const { return myT; }
   constexpr Modulated getModulated() const { return modulatedT; }
   constexpr void getModulated(std::vector<IO> &toret) const {
@@ -181,6 +173,9 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
   constexpr void setDeleted() { deleted = true; }
   constexpr bool getDeleted() const { return deleted; }
   constexpr const std::string &getValue() const { return value; }
+  constexpr void setValue() {
+    value = (name + std::string("_") + std::to_string(ID));
+  }
 
   // XXX: These should be only for non junctions
   constexpr std::string_view getEffort() const {
