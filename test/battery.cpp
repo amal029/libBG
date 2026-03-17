@@ -22,40 +22,40 @@ int main() {
   BondGraph battery{"battery"};
 
   // The capacitors
-  size_t c1id = battery.addComponent(Component<ComponentType::C>{"c1"});
-  size_t c2id = battery.addComponent(Component<ComponentType::C>{"c2"});
-  size_t c3id = battery.addComponent(Component<ComponentType::C>{"c3"});
-  size_t ctheta1id = battery.addComponent(Component<ComponentType::C>{"ctheta1"});
+  size_t c1id = battery.addComponent(Component<ComponentType::C>{"c1", battery.getID()});
+  size_t c2id = battery.addComponent(Component<ComponentType::C>{"c2", battery.getID()});
+  size_t c3id = battery.addComponent(Component<ComponentType::C>{"c3", battery.getID()});
+  size_t ctheta1id = battery.addComponent(Component<ComponentType::C>{"ctheta1", battery.getID()});
   size_t ctheta2id =
-      battery.addComponent(Component<ComponentType::C>{"ctheta2"});
+    battery.addComponent(Component<ComponentType::C>{"ctheta2", battery.getID()});
 
   // The resistors
-  size_t rthetaid = battery.addComponent(Component<ComponentType::R>{"rtheta"});
-  size_t r1id = battery.addComponent(Component<ComponentType::R, Modulated::T>{"r1"});
-  size_t r2id = battery.addComponent(Component<ComponentType::R, Modulated::T>{"r2"});
-  size_t r3id = battery.addComponent(Component<ComponentType::R, Modulated::T>{"r3"});
-  size_t rpid = battery.addComponent(Component<ComponentType::R>{"rp"});
+  size_t rthetaid = battery.addComponent(Component<ComponentType::R>{"rtheta", battery.getID()});
+  size_t r1id = battery.addComponent(Component<ComponentType::R, Modulated::T>{"r1", battery.getID()});
+  size_t r2id = battery.addComponent(Component<ComponentType::R, Modulated::T>{"r2", battery.getID()});
+  size_t r3id = battery.addComponent(Component<ComponentType::R, Modulated::T>{"r3", battery.getID()});
+  size_t rpid = battery.addComponent(Component<ComponentType::R>{"rp", battery.getID()});
 
   // The zero junctions
-  size_t j0id = battery.addComponent(Component<ComponentType::J0>{"j0"});
-  size_t j01id = battery.addComponent(Component<ComponentType::J0>{"j01"});
-  size_t j02id = battery.addComponent(Component<ComponentType::J0>{"j02"});
-  size_t j03id = battery.addComponent(Component<ComponentType::J0>{"j03"});
-  size_t j04id = battery.addComponent(Component<ComponentType::J0>{"j04"});
+  size_t j0id = battery.addComponent(Component<ComponentType::J0>{"j0", battery.getID()});
+  size_t j01id = battery.addComponent(Component<ComponentType::J0>{"j01", battery.getID()});
+  size_t j02id = battery.addComponent(Component<ComponentType::J0>{"j02", battery.getID()});
+  size_t j03id = battery.addComponent(Component<ComponentType::J0>{"j03", battery.getID()});
+  size_t j04id = battery.addComponent(Component<ComponentType::J0>{"j04", battery.getID()});
 
   // The one junctions
-  size_t j1id = battery.addComponent(Component<ComponentType::J1>{"j1"});
-  size_t j11id = battery.addComponent(Component<ComponentType::J1>{"j11"});
+  size_t j1id = battery.addComponent(Component<ComponentType::J1>{"j1", battery.getID()});
+  size_t j11id = battery.addComponent(Component<ComponentType::J1>{"j11", battery.getID()});
 
   // The output component XXX: This should be later changed when the
   // whole model is put together.
   size_t outputid = battery.addComponent(
-      Component<ComponentType::SF, Modulated::T>{"output"});
+					 Component<ComponentType::SF, Modulated::T>{"output", battery.getID()});
 
   // The modulated se
-  size_t seid = battery.addComponent(Component<ComponentType::SE, Modulated::T>{"se"});
+  size_t seid = battery.addComponent(Component<ComponentType::SE, Modulated::T>{"se", battery.getID()});
   size_t sfid =
-      battery.addComponent(Component<ComponentType::SF, Modulated::T>{"sf"});
+    battery.addComponent(Component<ComponentType::SF, Modulated::T>{"sf", battery.getID()});
 
   auto *sf = std::get_if<Component<ComponentType::SF, Modulated::T>>(
       &battery.getComponentAt(sfid));

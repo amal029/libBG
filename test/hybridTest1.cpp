@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <variant>
+#include <vector>
 
 
 void print_state_eqns(const expression_t &res, const char *name,
@@ -17,19 +18,20 @@ void print_state_eqns(const expression_t &res, const char *name,
 }
 
 int main() {
-  BondGraph bg("HybridExample1");
-  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se"});
-  size_t a1id = bg.addComponent(Component<ComponentType::J1>{"a1"});
-  size_t b0id = bg.addComponent(Component<ComponentType::J0>{"b0"});
-  size_t L1id = bg.addComponent(Component<ComponentType::L>{"L1"});
-  size_t c1id = bg.addComponent(Component<ComponentType::J1>{"c1"});
-  size_t r1id = bg.addComponent(Component<ComponentType::R, Modulated::T>{"r1"});
-  size_t cap1id = bg.addComponent(Component<ComponentType::C>{"cap1"});
-  size_t d0id = bg.addComponent(Component<ComponentType::J0>{"d0"});
-  size_t L2id = bg.addComponent(Component<ComponentType::L>{"L2"});
-  size_t e1id = bg.addComponent(Component<ComponentType::J1>{"e1"});
-  size_t r2id = bg.addComponent(Component<ComponentType::R>{"r2"});
-  size_t cap2id = bg.addComponent(Component<ComponentType::C>{"cap2"});
+  BondGraph<2> bg("HybridExample1", false);
+  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se", bg.getID()});
+  size_t a1id = bg.addComponent(Component<ComponentType::J1>{"a1", bg.getID()});
+  size_t b0id = bg.addComponent(Component<ComponentType::J0>{"b0", bg.getID()});
+  size_t L1id = bg.addComponent(Component<ComponentType::L>{"L1", bg.getID()});
+  size_t c1id = bg.addComponent(Component<ComponentType::J1>{"c1", bg.getID()});
+  // size_t r1id = bg.addComponent(Component<ComponentType::R,
+  // Modulated::T>{"r1", bg.getID()});
+  size_t cap1id = bg.addComponent(Component<ComponentType::C>{"cap1", bg.getID()});
+  size_t d0id = bg.addComponent(Component<ComponentType::J0>{"d0", bg.getID()});
+  size_t L2id = bg.addComponent(Component<ComponentType::L>{"L2", bg.getID()});
+  size_t e1id = bg.addComponent(Component<ComponentType::J1>{"e1", bg.getID()});
+  size_t r2id = bg.addComponent(Component<ComponentType::R>{"r2", bg.getID()});
+  size_t cap2id = bg.addComponent(Component<ComponentType::C>{"cap2", bg.getID()});
 
   // Now connect the components
   auto *se =
@@ -41,8 +43,8 @@ int main() {
   auto *L1 = std::get_if<Component<ComponentType::L>>(&bg.getComponentAt(L1id));
   auto *c1 =
       std::get_if<Component<ComponentType::J1>>(&bg.getComponentAt(c1id));
-  auto *r1 = std::get_if<Component<ComponentType::R, Modulated::T>>(
-      &bg.getComponentAt(r1id));
+  // auto *r1 = std::get_if<Component<ComponentType::R, Modulated::T>>(
+  //     &bg.getComponentAt(r1id));
   auto *cap1 =
       std::get_if<Component<ComponentType::C>>(&bg.getComponentAt(cap1id));
   auto *d0 =
@@ -60,7 +62,7 @@ int main() {
   bg.connect(*b0, *L1);
   bg.connect(*b0, *c1);
   bg.connect(*c1, *cap1);
-  bg.connect(*c1, *r1);
+  // bg.connect(*c1, *r1);
   bg.connect(*c1, *d0);
   bg.connect(*d0, *L2);
   bg.connect(*d0, *e1);
@@ -71,7 +73,7 @@ int main() {
   L1->component2Signal("e3", Causality::Effort);
 
   // Set the modulated component values
-  r1->signal2ModulatedComponent("R1");
+  // r1->signal2ModulatedComponent("R1");
 
   // Add the junctions that are switching junctions
   bg.addSwitch(a1);
@@ -80,13 +82,28 @@ int main() {
   bg.buildSwitchBondGraphs();
 
   // Then perform the simplification of all the graphs
-  // FIXME: This needs to be for all the graphs
   bg.simplify();
   // Then generate causality for all the graphs
-  // FIXME: This needs to be for all the graphs
   bg.assignCausality();
+
   // Then generate the state equations
-  // FIXME: This should give back a vector of asts?
   expressionAst ast = bg.generateStateSpace();
+  std::vector<expressionAst> asts;
+  asts.push_back(std::move(ast));
+  // Now we get all the hybrid graphs and simplify them?
+  // for (auto &x : bg.getSwitchedGraphs()) {
+  //   // std::cout << x << "\n";
+  //   x.simplify();
+  //   x.assignCausality();
+  //   // asts.push_back(x.generateStateSpace());
+  // }
+
+  // Print all the state equations for all the different bond graphs
+  for (expressionAst &ast : asts) {
+    print_state_eqns(cap1->getStateEq(ast), "Cap1", ast);
+    print_state_eqns(cap2->getStateEq(ast), "Cap2", ast);
+    print_state_eqns(L2->getStateEq(ast), "L2", ast);
+    print_state_eqns(L1->getStateEq(ast), "L1", ast);
+  }
   return 0;
 }

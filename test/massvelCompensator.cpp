@@ -63,19 +63,19 @@ void integrate(Solver<double> &s) {
 int main(void) {
   BondGraph bg("Compensator", false);
 
-  size_t mid = bg.addComponent(Component<ComponentType::L>{"m"});
-  size_t velid = bg.addComponent(Component<ComponentType::J1>{"vel"});
-  size_t conid = bg.addComponent(Component<ComponentType::J0>{"con"});
-  size_t j0id = bg.addComponent(Component<ComponentType::J0>{"j0"});
-  size_t kid = bg.addComponent(Component<ComponentType::R>{"k"});
-  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se"});
-  size_t wid = bg.addComponent(Component<ComponentType::SF>{"w"});
-  size_t yid = bg.addComponent(Component<ComponentType::O>{"y"});
+  size_t mid = bg.addComponent(Component<ComponentType::L>{"m", bg.getID()});
+  size_t velid = bg.addComponent(Component<ComponentType::J1>{"vel", bg.getID()});
+  size_t conid = bg.addComponent(Component<ComponentType::J0>{"con", bg.getID()});
+  size_t j0id = bg.addComponent(Component<ComponentType::J0>{"j0", bg.getID()});
+  size_t kid = bg.addComponent(Component<ComponentType::R>{"k", bg.getID()});
+  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se", bg.getID()});
+  size_t wid = bg.addComponent(Component<ComponentType::SF>{"w", bg.getID()});
+  size_t yid = bg.addComponent(Component<ComponentType::O>{"y", bg.getID()});
 
   // Add the observer too
-  size_t ysid = bg.addComponent(Component<ComponentType::SF>{"ys"});
-  size_t ogainid = bg.addComponent(Component<ComponentType::R>{"ogain"});
-  size_t obsid = bg.addComponent(Component<ComponentType::J0>{"obs"});
+  size_t ysid = bg.addComponent(Component<ComponentType::SF>{"ys", bg.getID()});
+  size_t ogainid = bg.addComponent(Component<ComponentType::R>{"ogain", bg.getID()});
+  size_t obsid = bg.addComponent(Component<ComponentType::J0>{"obs", bg.getID()});
 
   auto *m = std::get_if<Component<ComponentType::L>>(&bg.getComponentAt(mid));
   auto *vel =

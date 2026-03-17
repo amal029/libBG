@@ -8,10 +8,10 @@ int main() {
 
   // Add the components to the BondGraph
   BondGraph bg("ex1");
-  size_t cid = bg.addComponent(Component<ComponentType::C>{"c"});
-  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se"});
-  size_t rid = bg.addComponent(Component<ComponentType::R>{"r"});
-  size_t id1 = bg.addComponent(Component<ComponentType::J1>{"1"});
+  size_t cid = bg.addComponent(Component<ComponentType::C>{"c", bg.getID()});
+  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se", bg.getID()});
+  size_t rid = bg.addComponent(Component<ComponentType::R>{"r", bg.getID()});
+  size_t id1 = bg.addComponent(Component<ComponentType::J1>{"1", bg.getID()});
 
   auto *c = std::get_if<Component<ComponentType::C>>(&bg.getComponentAt(cid));
   auto *se =

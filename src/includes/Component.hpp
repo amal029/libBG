@@ -17,12 +17,12 @@
 #include <variant>
 #include <vector>
 
-struct Util {
-  static size_t getID() {
-    static size_t counter = 0;
-    return counter++;
-  }
-};
+// struct Util {
+//   static size_t getID() {
+//     static size_t counter = 0;
+//     return counter++;
+//   }
+// };
 
 // The type of components that are allowed in the Bond Graph
 enum class ComponentType : std::uint8_t {
@@ -105,7 +105,7 @@ private:
 // The common Component class
 template <ComponentType T, Modulated M = Modulated::F> struct Component {
   constexpr Component() {} // This is for Bond Graph insertion
-  constexpr Component(const char *n) : name(n), ID(Util::getID()), myT(T) {
+  constexpr Component(const char *n, size_t id) : name(n), ID(id), myT(T) {
     value = (name + std::string("_") + std::to_string(ID));
   }
   constexpr Component(const Component &) = default;

@@ -1,7 +1,6 @@
 #include "../includes/expression.hpp"
 #include <cstddef>
 #include <iostream>
-#include <ostream>
 #include <vector>
 
 int main() {

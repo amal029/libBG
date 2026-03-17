@@ -57,12 +57,12 @@ void integrate(Solver<double> &s) {
 
 int main() {
   BondGraph bg("RLClowpass");
-  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se"});
-  size_t rid = bg.addComponent(Component<ComponentType::R>{"r"});
-  size_t cid = bg.addComponent(Component<ComponentType::C>{"c"});
-  size_t lid = bg.addComponent(Component<ComponentType::L>{"l"});
-  size_t j1id = bg.addComponent(Component<ComponentType::J1>{"j1"});
-  size_t j0id = bg.addComponent(Component<ComponentType::J0>{"j0"});
+  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se", bg.getID()});
+  size_t rid = bg.addComponent(Component<ComponentType::R>{"r", bg.getID()});
+  size_t cid = bg.addComponent(Component<ComponentType::C>{"c", bg.getID()});
+  size_t lid = bg.addComponent(Component<ComponentType::L>{"l", bg.getID()});
+  size_t j1id = bg.addComponent(Component<ComponentType::J1>{"j1", bg.getID()});
+  size_t j0id = bg.addComponent(Component<ComponentType::J0>{"j0", bg.getID()});
 
   auto *se =
       std::get_if<Component<ComponentType::SE>>(&bg.getComponentAt(seid));
@@ -85,10 +85,6 @@ int main() {
   bg.simplify();
   // Perform causality analysis
   bg.assignCausality();
-
-  std::cout << bg << "\n";
-  BondGraph bgc = bg;
-  std::cout << bgc << "\n";
 
   // Get the state equations
   expressionAst ast = bg.generateStateSpace();

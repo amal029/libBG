@@ -16,26 +16,26 @@ void print_state_eqns(const expression_t &res, const char *name,
 
 int main() {
   BondGraph bg("hoistingDevicediff");
-  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se"});
-  size_t u0id = bg.addComponent(Component<ComponentType::J0>{"u0"});
-  size_t j1id = bg.addComponent(Component<ComponentType::J1>{"j1"});
-  size_t u12id = bg.addComponent(Component<ComponentType::J0>{"u12"});
-  size_t rid = bg.addComponent(Component<ComponentType::R>{"r"});
-  size_t u2id = bg.addComponent(Component<ComponentType::J0>{"u2"});
-  size_t j2id = bg.addComponent(Component<ComponentType::J1>{"j2"});
-  size_t u23id = bg.addComponent(Component<ComponentType::J0>{"u23"});
-  size_t l1id = bg.addComponent(Component<ComponentType::L>{"l1"});
-  size_t u3id = bg.addComponent(Component<ComponentType::J0>{"u3"});
-  size_t gyid = bg.addComponent(Component<ComponentType::GY>{"gy"});
+  size_t seid = bg.addComponent(Component<ComponentType::SE>{"se", bg.getID()});
+  size_t u0id = bg.addComponent(Component<ComponentType::J0>{"u0", bg.getID()});
+  size_t j1id = bg.addComponent(Component<ComponentType::J1>{"j1", bg.getID()});
+  size_t u12id = bg.addComponent(Component<ComponentType::J0>{"u12", bg.getID()});
+  size_t rid = bg.addComponent(Component<ComponentType::R>{"r", bg.getID()});
+  size_t u2id = bg.addComponent(Component<ComponentType::J0>{"u2", bg.getID()});
+  size_t j2id = bg.addComponent(Component<ComponentType::J1>{"j2", bg.getID()});
+  size_t u23id = bg.addComponent(Component<ComponentType::J0>{"u23", bg.getID()});
+  size_t l1id = bg.addComponent(Component<ComponentType::L>{"l1", bg.getID()});
+  size_t u3id = bg.addComponent(Component<ComponentType::J0>{"u3", bg.getID()});
+  size_t gyid = bg.addComponent(Component<ComponentType::GY>{"gy", bg.getID()});
   // The new ones
-  size_t oid = bg.addComponent(Component<ComponentType::J1>{"o"});
-  size_t l2id = bg.addComponent(Component<ComponentType::L>{"l2"});
-  size_t r2id = bg.addComponent(Component<ComponentType::R>{"r2"});
-  size_t tfid = bg.addComponent(Component<ComponentType::TF>{"tf"});
+  size_t oid = bg.addComponent(Component<ComponentType::J1>{"o", bg.getID()});
+  size_t l2id = bg.addComponent(Component<ComponentType::L>{"l2", bg.getID()});
+  size_t r2id = bg.addComponent(Component<ComponentType::R>{"r2", bg.getID()});
+  size_t tfid = bg.addComponent(Component<ComponentType::TF>{"tf", bg.getID()});
 
-  size_t v1id = bg.addComponent(Component<ComponentType::J1>{"v1"});
-  size_t se2id = bg.addComponent(Component<ComponentType::SE>{"se2"});
-  size_t l3id = bg.addComponent(Component<ComponentType::L>{"l3"});
+  size_t v1id = bg.addComponent(Component<ComponentType::J1>{"v1", bg.getID()});
+  size_t se2id = bg.addComponent(Component<ComponentType::SE>{"se2", bg.getID()});
+  size_t l3id = bg.addComponent(Component<ComponentType::L>{"l3", bg.getID()});
 
   auto *se =
       std::get_if<Component<ComponentType::SE>>(&bg.getComponentAt(seid));

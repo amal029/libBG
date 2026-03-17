@@ -427,10 +427,11 @@ struct expressionAst {
         if (eqls != nullptr && torepsym->getName() == eqls->getName()) {
           if (isAlgebraic(*eqls, arena[x->getRight()])) {
             throw std::runtime_error("Algebraic loop detected");
-          }
-          *torep = x->getRight(); // replaced
-          if (getNonConstSymbols(*torep, q)) {
-            q.push(torep);
+          } else {
+            *torep = x->getRight(); // replaced
+            if (getNonConstSymbols(*torep, q)) {
+              q.push(torep);
+            }
           }
           break;
         } else if (eqls == nullptr) {

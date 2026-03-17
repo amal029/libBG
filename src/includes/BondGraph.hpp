@@ -34,20 +34,30 @@ template <size_t N = 64> struct BondGraph {
 
   // Adding components to the graph
   template <ComponentType T, Modulated M>
-  size_t addComponent(Component<T, M> &&x) {
+  size_t addComponent(Component<T, M> &&x, bool extend = false) {
     // We need to push the pointer to the correct position according to
     // the ID of the component.
     size_t els = x.getID();
-    if (components.size() <= els) {
-      // Then increase the size of the vector
-      components.resize(els + 1);
-      // Reserve space for the edges too
-      edges.resize(els + 1, {});
-      redges.resize(els + 1, {});
-      // Reserve space in visited vector too
-      visited.resize(els + 1, false);
+    if (!extend) {
+      if (components.size() <= els) {
+        // Then increase the size of the vector
+        components.resize(els + 1);
+        // Reserve space for the edges too -- this makes it empty!
+        edges.resize(els + 1, {});
+        redges.resize(els + 1, {});
+        // Reserve space in visited vector too
+        visited.resize(els + 1, false);
+      }
+      components[els] = std::move(x); // add it to the correct position
+    } else {
+      // Here just add to the component list and extend the edges and redges by
+      // 1. This is needed, because of hybrid graph construction, which happens
+      // dynamically.
+      components.push_back(std::move(x));
+      edges.push_back({});
+      redges.push_back({});
+      visited.push_back(false);
     }
-    components[els] = std::move(x); // add it to the correct position
     return els;
   }
 
@@ -462,54 +472,100 @@ template <size_t N = 64> struct BondGraph {
 
   constexpr void offJunction(size_t id, ComponentType T) {
     // Get all the outgoing edges
-    std::vector<size_t> &oedges = getEdges()[id];
+    size_t oedge_size = edges[id].size();
+    std::cout << oedge_size << "\n";
     // We add the se:0 for all these edges
-    for (size_t i = 0; i < oedges.size(); ++i) {
+    for (size_t i = 0; i < oedge_size; ++i) {
       // XXX: Set the value of the SE to zero
       size_t j;
       if (T == ComponentType::J0) {
-        j = addComponent(Component<ComponentType::SE>{"se"});
+        j = addComponent(Component<ComponentType::SE>{"se", getID()}, true);
+        auto *jc =
+            std::get_if<Component<ComponentType::SE>>(&getComponentAt(j));
+        jc->addPort(Port(PortType::OUT, edges[id][i]));
       } else if (T == ComponentType::J1) {
-        j = addComponent(Component<ComponentType::SF>{"sf"});
+        std::cout << "allocating sf\n";
+        std::cout << components.size() << "\n";
+        // This is allocating to components, but ID is being obtained
+        // from a static variable, which is shared between different
+        // bondgraphs -- this does not work.
+        j = addComponent(Component<ComponentType::SF>{"sf", getID()}, true);
+        std::cout << components.size() << "\n";
+        auto *jc =
+            std::get_if<Component<ComponentType::SF>>(&getComponentAt(j));
+        std::cout << "j: " << j << "\n";
+        if (jc == nullptr) {
+          std::cout << "allocation failed\n";
+        }
+        jc->addPort(Port(PortType::OUT, edges[id][i]));
+        std::cout << "added the port to the sf component\n";
+      } else {
+        throw std::runtime_error("Only junctions can be switches");
       }
-      edges[j].push_back(oedges[i]); // se/sf --> component
+      edges[j].push_back(edges[id][i]); // se/sf --> component
       // Get the position of the id in reverse edges
-      std::vector<size_t> &g = redges[oedges[i]];
+      std::vector<size_t> &g = redges[edges[id][i]];
       auto p = std::find(g.begin(), g.end(), id);
       assert(p != g.end() && "Component not connected to switch");
       *p = j;
+      // Change the port id for this component
+      componentVariant &x = getComponentAt(edges[id][i]);
+      std::visit(
+          [&](auto &y) {
+            Port *myOutport = y.getPortWithNeighbourID(id);
+            myOutport->setNeighbourID(j);
+          },
+          x);
     }
-    std::vector<size_t> &iedges = getRedges()[id];
+    size_t iedge_size = redges[id].size();
     // Now do the same thing for the reverse edges from id
-    for (size_t i = 0; i < iedges.size(); ++i) {
+    for (size_t i = 0; i < iedge_size; ++i) {
       size_t j;
       if (T == ComponentType::J0) {
-        j = addComponent(Component<ComponentType::SE>{"se"});
+        j = addComponent(Component<ComponentType::SE>{"se", getID()}, true);
+        auto *jc =
+            std::get_if<Component<ComponentType::SE>>(&getComponentAt(j));
+        jc->addPort(Port(PortType::IN, redges[id][i]));
+
       } else if (T == ComponentType::J1) {
-        j = addComponent(Component<ComponentType::SF>{"sf"});
+        j = addComponent(Component<ComponentType::SF>{"sf", getID()}, true);
+        auto *jc =
+            std::get_if<Component<ComponentType::SF>>(&getComponentAt(j));
+        jc->addPort(Port(PortType::IN, redges[id][i]));
+
+      } else {
+        throw std::runtime_error("Switches can only be junctions");
       }
-      edges[j].push_back(iedges[i]); // se/sf --> component
-      std::vector<size_t> &g = edges[iedges[i]];
+      redges[j].push_back(redges[id][i]); // se/sf --> component
+      std::vector<size_t> &g = edges[redges[id][i]];
       auto p = std::find(g.begin(), g.end(), id);
       assert(p != g.end() && "Component not connected to switch");
       *p = j;
+      componentVariant &x = getComponentAt(redges[id][i]);
+      std::visit(
+          [&](auto &y) {
+            Port *myOutport = y.getPortWithNeighbourID(id);
+            myOutport->setNeighbourID(j);
+          },
+          x);
     }
   }
 
   // This changes the junction to off. Changes the connection from a junction to
   // se:0 or sf:0
-  template <ComponentType J0, Modulated M>
+  template <Modulated M>
   constexpr void offJunction(Component<ComponentType::J0, M> &junc) {
     // Get the id of the junction
     offJunction(junc.getID(), ComponentType::J0);
-    junc.setDeleted(); // This junction is now gone.
+    std::visit([](auto &x) { x.setDeleted(); }, getComponentAt(junc.getID()));
   }
 
-  template <ComponentType J1, Modulated M>
+  template <Modulated M>
   constexpr void offJunction(Component<ComponentType::J1, M> &junc) {
     // Change the junction correctly
+    std::cout << junc << "\n";
     offJunction(junc.getID(), ComponentType::J1);
-    junc.setDeleted(); // This junction is now gone.
+    std::visit([](auto &x) { x.setDeleted(); }, getComponentAt(junc.getID()));
   }
 
   // Now if there are any switches then we need to make a bond graph for
@@ -518,33 +574,34 @@ template <size_t N = 64> struct BondGraph {
     // XXX: This has exponential complexity.
     for (size_t i = 0; i < (size_t)std::exp2(switch_junctions.size()); ++i) {
       std::bitset<N> vv{i};
+      std::cout << "bitset: " << vv << "\n";
       switched_bond_graphs.emplace_back(*this); // copy of the BondGraph
       // Now change the graph according to what junctions are on and off
       for (size_t j = 0; j < switch_junctions.size(); ++j) {
         if (vv[j] == 0) {
-          Component<ComponentType::J0, Modulated::F> *junc =
-              std::get_if<Component<ComponentType::J0, Modulated::F>>(
-                  switch_junctions[j]);
+          Component<ComponentType::J0, Modulated::F> **junc =
+              std::get_if<Component<ComponentType::J0, Modulated::F> *>(
+                  &switch_junctions[j]);
           if (junc != nullptr) {
-            switched_bond_graphs[i].offJunction(*junc);
+            switched_bond_graphs[i].offJunction(**junc);
           } else {
-            Component<ComponentType::J1, Modulated::F> *junc =
-                std::get_if<Component<ComponentType::J1, Modulated::F>>(
-                    switch_junctions[j]);
+            Component<ComponentType::J1, Modulated::F> **junc =
+                std::get_if<Component<ComponentType::J1, Modulated::F> *>(
+                    &switch_junctions[j]);
             if (junc != nullptr) {
-              switched_bond_graphs[i].offJunction(*junc);
+              switched_bond_graphs[i].offJunction(**junc);
             } else {
-              Component<ComponentType::J0, Modulated::T> *junc =
-                  std::get_if<Component<ComponentType::J0, Modulated::T>>(
-                      switch_junctions[j]);
+              Component<ComponentType::J0, Modulated::T> **junc =
+                  std::get_if<Component<ComponentType::J0, Modulated::T> *>(
+                      &switch_junctions[j]);
               if (junc != nullptr) {
-                switched_bond_graphs[i].offJunction(*junc);
+                switched_bond_graphs[i].offJunction(**junc);
               } else {
-                Component<ComponentType::J1, Modulated::T> *junc =
-                    std::get_if<Component<ComponentType::J1, Modulated::T>>(
-                        switch_junctions[j]);
+                Component<ComponentType::J1, Modulated::T> **junc =
+                    std::get_if<Component<ComponentType::J1, Modulated::T> *>(
+                        &switch_junctions[j]);
                 if (junc != nullptr) {
-                  switched_bond_graphs[i].offJunction(*junc);
+                  switched_bond_graphs[i].offJunction(**junc);
                 } else {
                   throw std::runtime_error("Cannot get junction for switching");
                 }
@@ -555,6 +612,13 @@ template <size_t N = 64> struct BondGraph {
       }
     }
   }
+
+  // Get the bond graphs for the hybrid systems
+  std::vector<BondGraph<N>> &getSwitchedGraphs() {
+    return switched_bond_graphs;
+  }
+  // Getting the counter
+  size_t getID() { return counter++; }
 
 private:
   // Gets the name of the storage elements
@@ -1497,6 +1561,15 @@ private:
   constexpr bool canElimJunction(Component<T, M> &x) {
     bool toret = false;
     size_t numPorts = x.portSize();
+    // XXX: Only if this junction is not in the hybrid junction list
+    auto p = std::find_if(
+        switch_junctions.begin(), switch_junctions.end(), [&x](const auto &y) {
+          // First get the ID of the junction
+          size_t yid = std::visit([](const auto &z) { return z->getID(); }, y);
+          return yid == x.getID();
+        });
+    if (p != switch_junctions.end())
+      return toret;
     if (numPorts == 2)
       toret = (x.getPort(0)->getPortType() == PortType::IN &&
                x.getPort(1)->getPortType() == PortType::OUT) ||
@@ -1651,6 +1724,7 @@ private:
   std::vector<junctionVariantPtr> switch_junctions;
   std::vector<BondGraph<N>> switched_bond_graphs;
   std::vector<std::bitset<N>> switches;
+  size_t counter = 0;
   // The booleans to state if simplification and causality analysis is
   // done.
   bool isSimplified = false;
