@@ -364,7 +364,9 @@ struct expressionAst {
       ast.simplify(toget, eqs);
       return ast[toget];
     } else {
-      throw NotFound("Did not find the variables for storage/output element");
+      std::cout << ss << std::endl;
+      throw std::runtime_error(
+          std::format("Did not find the variables for storage element {}", ss));
     }
   }
 

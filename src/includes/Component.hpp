@@ -57,7 +57,7 @@ struct Port {
   Port(Port &&) = default;
   Port &operator=(const Port &) = default;
   Port &operator=(Port &&) = default;
-  ~Port() {}
+  ~Port() = default;
 
   // The public functions
   constexpr void setInCausality(Causality c) { in = c; }
@@ -161,6 +161,31 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
   }
   constexpr void setPort(size_t i, Port &&p) { ports[i] = std::move(p); }
   constexpr void addPort(Port &&p) { ports.push_back(std::move(p)); }
+  constexpr void eraseInPorts() {
+    std::vector<size_t> inPorts;
+    for (size_t i = 0; i < ports.size(); ++i) {
+      if (ports[i].getPortType() == PortType::IN) {
+        inPorts.push_back(ports[i].getNeighbourID());
+      }
+    }
+    // Delete all these ports
+    for (size_t i : inPorts) {
+      remPort(i);
+    }
+  }
+  constexpr void eraseOutPorts() {
+    std::vector<size_t> outPorts;
+    for (size_t i = 0; i < ports.size(); ++i) {
+      if (ports[i].getPortType() == PortType::OUT) {
+        outPorts.push_back(ports[i].getNeighbourID());
+      }
+    }
+    // Delete all these ports
+    for (size_t i : outPorts) {
+      remPort(i);
+    }
+  }
+
   constexpr void remPort(size_t nID) {
     auto torem =
         std::find_if(ports.begin(), ports.end(), [&nID](const Port &p) {
@@ -362,9 +387,11 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
         // std::string ss = "d" + std::string(p->getOutCausalName());
         const std::string &ss = getInternalName();
         return expressionAst::pr_getStateEq(ast, ss, eqs);
-      } else {
+      } else if (p->getOutCausality() == Causality::Effort) {
         std::string_view ss = p->getInCausalName();
         return expressionAst::pr_getStateEq(ast, ss, eqs);
+      } else {
+        throw std::runtime_error("Causality not assigned");
       }
     } else if constexpr (T == ComponentType::C) {
       const Port *p = getPort(0);
@@ -373,9 +400,11 @@ template <ComponentType T, Modulated M = Modulated::F> struct Component {
         // std::string ss = "d" + std::string(p->getOutCausalName());
         const std::string &ss = getInternalName();
         return expressionAst::pr_getStateEq(ast, ss, eqs);
-      } else {
+      } else if (p->getOutCausality() == Causality::Flow) {
         std::string_view ss = p->getInCausalName();
         return expressionAst::pr_getStateEq(ast, ss, eqs);
+      } else {
+        throw std::runtime_error("Causality not assigned");
       }
     }
   }
@@ -426,10 +455,10 @@ private:
 
 // The junction variants
 using junctionVariantPtr =
-    std::variant<Component<ComponentType::J0, Modulated::T>*,
-                 Component<ComponentType::J0, Modulated::F>*,
-                 Component<ComponentType::J1, Modulated::T>*,
-                 Component<ComponentType::J1, Modulated::F>*>;
+    std::variant<Component<ComponentType::J0, Modulated::T> *,
+                 Component<ComponentType::J0, Modulated::F> *,
+                 Component<ComponentType::J1, Modulated::T> *,
+                 Component<ComponentType::J1, Modulated::F> *>;
 // using junctionVariantPtr = junctionVariant *;
 
 // This is the variant with all the different components
